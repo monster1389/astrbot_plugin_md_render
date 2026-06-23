@@ -69,7 +69,9 @@ class TestExpr:
         """块级表达式 $$...$$。"""
         text = "$$\n\\int_0^\\infty e^{-x} dx\n$$"
         segments = parse(text)
-        assert any(isinstance(s, BlockExpr) for s in segments)
+        block_exprs = [s for s in segments if isinstance(s, BlockExpr)]
+        assert len(block_exprs) == 1
+        assert "\\int" in block_exprs[0].expr
 
 
 class TestDivider:
