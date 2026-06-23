@@ -1,0 +1,52 @@
+{
+  "代码块": {
+    "type": "select",
+    "label": "代码块处理",
+    "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且txt"],
+    "default": "渲染且txt"
+  },
+  "表格": {
+    "type": "select",
+    "label": "表格处理",
+    "options": ["不处理", "渲染图像", "渲染且保留原文"],
+    "default": "渲染图像"
+  },
+  "表达式": {
+    "type": "select",
+    "label": "数学表达式处理",
+    "options": ["不处理", "渲染图像", "渲染且保留原文"],
+    "default": "渲染图像"
+  },
+  "分隔线": {
+    "type": "select",
+    "label": "分隔线 --- 处理",
+    "options": ["不处理", "切分"],
+    "default": "不处理"
+  },
+  "字体颜色": {
+    "type": "select",
+    "label": "渲染字体颜色",
+    "options": ["#9CDCFE (浅蓝)", "#ABB2BF (material 默认)", "#D4D4D4 (浅灰)", "#FFFFFF (纯白)"],
+    "default": "#9CDCFE (浅蓝)"
+  },
+  "背景颜色": {
+    "type": "select",
+    "label": "渲染背景颜色",
+    "options": ["#1E1E1E (VS Code 深色)", "#2D2D2D (浅深色)", "#000000 (纯黑)", "#FFFFFF (纯白)"],
+    "default": "#1E1E1E (VS Code 深色)"
+  },
+  "字形映射": {
+    "type": "text",
+    "label": "缺失字形替代映射",
+    "editor_mode": true,
+    "editor_language": "json",
+    "default": "{\n  \"✗\": \"✕\",\n  \"✓\": \"✔\",\n  \"—\": \"-\",\n  \"–\": \"-\",\n  \"…\": \"...\",\n  \"　\": \" \"\n}",
+    "hint": "若字体缺少某个字符的字形，自动按此表替换为相似字符，避免显示豆腐块。"
+  },
+  "临时文件存活": {
+    "type": "number",
+    "label": "临时文件存活时间（分钟）",
+    "default": 5,
+    "description": "0=即时删除, -1=永久保留"
+  }
+}
