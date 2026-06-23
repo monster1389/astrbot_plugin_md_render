@@ -47,11 +47,13 @@ def fallback(char: str, mapping: dict[str, str], font: ImageFont.FreeTypeFont | 
     if font is None:
         return char
     try:
-        mask = font.getmask(char)
-        if mask is not None:
+        glyph_index = font.font.get_char_index(ord(char))
+        if glyph_index != 0:
             return char
-    except Exception:
+    except (ValueError, OSError, AttributeError):
         pass
+    except Exception as exc:
+        logger.warning(f"Unexpected error during glyph detection for '{char}': {exc}")
     return mapping.get(char, char)
 
 
