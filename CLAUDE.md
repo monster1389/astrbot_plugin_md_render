@@ -73,11 +73,19 @@ OnDecoratingResultEvent (priority=1000)  ← 本插件
 RespondStage 发送最终 chain
 ```
 
+### 配置中心
+
+`render/utils.py` — `RenderConfig` dataclass + 四个工具函数：
+- `load_config(raw)` — 从 AstrBot 配置字典构造配置对象
+- `parse_color(value)` — 提取纯 hex 颜色
+- `find_font_path()` — 发现可用中文字体
+- `build_temp_path(data_dir, prefix, ext)` — 在 temp/ 下建带时间戳的文件路径
+
 ### 渲染类型
 
 | 输入 | 输出 | 工具 |
 |------|------|------|
-| ` ```lang ... ``` ` | Image(png) + File(.txt) | pygments → pillow |
+| ` ```lang ... ``` ` | Image(png) + 可选 File(.txt) | pygments → pillow |
 | `\| 表头 \| ...` | Image(png) | matplotlib.table |
 | — | 临时文件清理 | `render/cleaner.py` — 周期性扫描 temp/，按配置存活时长删过期文件 |
 
