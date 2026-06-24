@@ -128,46 +128,6 @@ class TestBuildChain:
         mock_render.assert_not_called()
 
 
-class TestSplitChain:
-    def test_single_plain(self):
-        """单个 Plain 段留在末段。"""
-        from render.chain import split_chain
-
-        chain = [{"type": "Plain", "text": "你好"}]
-        front, last = split_chain(chain)
-        assert len(front) == 0
-        assert len(last) == 1
-
-    def test_plain_with_attachments(self):
-        """Plain + Image → 同段，最后一段留末段。"""
-        from render.chain import split_chain
-
-        chain = [
-            {"type": "Plain", "text": "看:"},
-            {"type": "Image", "path": "/tmp/code.png"},
-            {"type": "Plain", "text": "结束"},
-        ]
-        front, last = split_chain(chain)
-        assert len(front) == 1
-        assert len(front[0]) == 2
-        assert len(last) == 1
-        assert last[0]["text"] == "结束"
-
-    def test_divider_splits(self):
-        """divider 标记处断开。"""
-        from render.chain import split_chain
-
-        chain = [
-            {"type": "Plain", "text": "上"},
-            {"type": "divider"},
-            {"type": "Plain", "text": "下"},
-        ]
-        front, last = split_chain(chain)
-        assert len(front) == 1
-        assert front[0][0]["text"] == "上"
-        assert len(last) == 1
-        assert last[0]["text"] == "下"
-
     @patch("render.chain.render_code")
     def test_code_render_failure_fallback(self, mock_render):
         """代码块渲染失败时回退为 Plain 原文，不影响后续段落。"""

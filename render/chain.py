@@ -1,7 +1,6 @@
-"""消息链组装与自然分段。
+"""消息链组装。
 
 build_chain: 根据配置模式将解析结果+渲染产物组装为统一的消息链。
-split_chain: 以 Plain 为锚点自然分段，末段留给 RespondStage。
 """
 from __future__ import annotations
 
@@ -210,50 +209,3 @@ def _table_to_text(table: Table) -> str:
     for row in table.rows:
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
-
-
-def split_chain(
-    chain: list[dict[str, Any]],
-) -> tuple[list[list[dict[str, Any]]], list[dict[str, Any]]]:
-    """将消息链按 Plain 锚点自然分段。
-
-    规则:
-      - 以 Plain 起始，其后紧跟的 Image/File 归入同段。
-      - 遇到 divider 时断开。
-      - 最后一段留在末段返回，其余段为前置发送段。
-
-    Args:
-        chain: build_chain() 输出的消息链结构列表。
-
-    Returns:
-        (front_segments, last_segment) — 前置发送段列表和末段。
-    """
-    if not chain:
-        return [], []
-
-    groups: list[list[dict[str, Any]]] = []
-    current: list[dict[str, Any]] = []
-
-    for item in chain:
-        if item["type"] == "divider":
-            if current:
-                groups.append(current)
-                current = []
-            continue
-        if item["type"] == "Plain":
-            if current:
-                groups.append(current)
-            current = [item]
-        else:
-            current.append(item)
-
-    if current:
-        groups.append(current)
-
-    if not groups:
-        return [], []
-
-    if len(groups) == 1:
-        return [], groups[0]
-
-    return groups[:-1], groups[-1]

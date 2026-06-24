@@ -17,7 +17,6 @@ from typing import Any
 import py7zr
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.all import MessageChain
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 from astrbot.api.star import Context, Star, StarTools, register
@@ -27,7 +26,7 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
-from render.chain import build_chain, split_chain  # noqa: E402
+from render.chain import build_chain  # noqa: E402
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
@@ -152,16 +151,7 @@ class MdRenderPlugin(Star):
                 parts.append(f"表达式({cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
-        front_segments, last_segment = split_chain(built)
-
-        # 前置段逐段发送
-        for seg_group in front_segments:
-            comps = self._to_comp_list(seg_group)
-            if comps:
-                await event.send(MessageChain(comps))
-
-        # 末段放回 chain 交给 RespondStage
-        result.chain = self._to_comp_list(last_segment)
+        result.chain = self._to_comp_list(built)
 
     def _to_comp_list(self, seg_group: list[dict[str, Any]]) -> list:
         """将内部 chain 结构转换为 AstrBot Component 列表。
