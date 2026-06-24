@@ -65,13 +65,22 @@ def parse_color(value: str) -> str:
     return value.split(" ")[0]
 
 
-def find_font_path() -> str | None:
+def find_font_path(data_dir: str | None = None) -> str | None:
     """发现可用中文字体。
+
+    优先使用捆绑的更纱等宽黑体（中英 2:1 等宽），
+    不存在时 fallback 到系统字体。
+
+    Args:
+        data_dir: 插件数据目录路径，为 None 时只搜系统字体。
 
     Returns:
         第一个存在的字体路径，都没找到返回 None。
     """
-    candidates = [
+    candidates: list[str] = []
+    if data_dir:
+        candidates.append(os.path.join(data_dir, "fonts", "SarasaMonoSC-Regular.ttf"))
+    candidates += [
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",

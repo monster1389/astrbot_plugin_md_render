@@ -37,7 +37,7 @@ def render_table(
     headers: list[str] = getattr(table, "headers", [])
     rows: list[list[str]] = getattr(table, "rows", [])
 
-    font_path = find_font_path()
+    font_path = find_font_path(data_dir)
     if font_path is None:
         logger.warning("未找到 CJK 字体，表格中文可能显示为豆腐块")
     font = ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
