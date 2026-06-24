@@ -104,5 +104,5 @@ def build_temp_path(data_dir: str, prefix: str, ext: str) -> str:
     """
     temp_dir = os.path.join(data_dir, "temp")
     os.makedirs(temp_dir, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     return os.path.join(temp_dir, f"{prefix}_{ts}{ext}")
