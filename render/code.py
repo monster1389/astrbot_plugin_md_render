@@ -68,6 +68,8 @@ def render_code(
         style="material",
         font_size=14,
         line_numbers=False,
+        image_pad=10,
+        line_pad=4,
         font_name=_find_mono_font_path(data_dir) or "DejaVuSansMono",
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
