@@ -10,9 +10,6 @@ from datetime import datetime
 
 from pillowlatex import RenderLaTeX
 
-from render.table import _parse_color  # noqa: F401  reserved for future background compositing
-
-
 def _render_latex(latex_src: str, config: dict, data_dir: str) -> str:
     """核心渲染逻辑：LaTeX 源码 → PNG。
 
