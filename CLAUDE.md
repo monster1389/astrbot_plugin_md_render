@@ -79,6 +79,7 @@ RespondStage 发送最终 chain
 |------|------|------|
 | ` ```lang ... ``` ` | Image(png) + File(.txt) | pygments → pillow |
 | `\| 表头 \| ...` | Image(png) | matplotlib.table |
+| — | 临时文件清理 | `render/cleaner.py` — 周期性扫描 temp/，按配置存活时长删过期文件 |
 
 ### 关键 API
 
