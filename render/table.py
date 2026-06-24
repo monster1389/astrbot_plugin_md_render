@@ -49,15 +49,32 @@ def render_table(
     n_rows = len(rows) + 1
     n_cols = max(len(headers), 1)
 
-    fig, ax = plt.subplots(figsize=(n_cols * 2.5, n_rows * 0.45 + 0.3))
+    cell_text = [headers] + rows
+
+    # 按内容测算各列所需宽度
+    measure_font = ImageFont.truetype(font_path, 11) if font_path else ImageFont.load_default()
+    col_widths: list[float] = []
+    for c in range(n_cols):
+        max_px = 0.0
+        for r in range(n_rows):
+            w = measure_font.getlength(cell_text[r][c])
+            if w > max_px:
+                max_px = w
+        col_widths.append(max_px / 90 + 0.6)  # px→英寸 + 列内边距
+
+    total_width = sum(col_widths)
+    fig_width = min(total_width, 12)
+    fig_height = n_rows * 0.45 + 0.3
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     fig.patch.set_facecolor(cfg.bg_color)
     ax.set_facecolor(cfg.bg_color)
 
-    cell_text = [headers] + rows
     tbl = ax.table(
         cellText=cell_text,
         cellLoc="center",
         loc="center",
+        colWidths=[w / total_width for w in col_widths],
     )
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(11)
