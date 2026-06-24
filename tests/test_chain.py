@@ -165,3 +165,40 @@ class TestBuildChain:
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
         assert result[0]["type"] == "Plain"
+
+    @patch("render.chain.render_code")
+    def test_code_txt_only(self, mock_render):
+        """仅txt模式：只有 File 没有 Image，不调渲染。"""
+        from render.chain import build_chain
+
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="仅txt")
+        result = build_chain(segments, cfg, "/tmp")
+        assert len(result) == 1
+        assert result[0]["type"] == "File"
+        mock_render.assert_not_called()
+
+    @patch("render.chain.render_table")
+    def test_table_md_only(self, mock_render):
+        """仅md文件模式：只有 File 没有 Image，不调渲染。"""
+        from render.chain import build_chain
+
+        segments = [Table(headers=["A"], rows=[["1"]])]
+        cfg = _make_cfg(table_mode="仅md文件")
+        result = build_chain(segments, cfg, "/tmp")
+        assert len(result) == 1
+        assert result[0]["type"] == "File"
+        mock_render.assert_not_called()
+
+    @patch("render.chain.render_table")
+    def test_table_render_and_md(self, mock_render):
+        """渲染且md文件模式：Image + File，无 Plain 原文。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = "/tmp/table_001.png"
+        segments = [Table(headers=["A"], rows=[["1"]])]
+        cfg = _make_cfg(table_mode="渲染且md文件")
+        result = build_chain(segments, cfg, "/tmp")
+        assert len(result) == 2
+        assert result[0]["type"] == "Image"
+        assert result[1]["type"] == "File"
