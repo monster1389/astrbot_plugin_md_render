@@ -17,15 +17,20 @@ from render.utils import RenderConfig, build_temp_path
 
 logger = logging.getLogger(__name__)
 
-# 等宽字体候选路径
-_MONO_FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-]
+def _find_mono_font_path(data_dir: str) -> str | None:
+    """返回第一个可用的等宽字体路径，都不存在返回 None。
 
+    优先使用捆绑的更纱等宽黑体（中英 2:1 等宽），
+    不存在时 fallback 到系统 DejaVu Sans Mono。
 
-def _find_mono_font_path() -> str | None:
-    """返回第一个可用的等宽字体路径，都不存在返回 None。"""
-    for path in _MONO_FONT_CANDIDATES:
+    Args:
+        data_dir: 插件数据目录路径。
+    """
+    candidates = [
+        os.path.join(data_dir, "fonts", "SarasaMonoSC-Regular.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    ]
+    for path in candidates:
         if os.path.exists(path):
             return path
     return None
@@ -49,7 +54,7 @@ def render_code(
     lang: str = getattr(codeblock, "lang", "") or ""
     code: str = getattr(codeblock, "code", "")
 
-    font = _load_mono_font()
+    font = _load_mono_font(data_dir)
 
     code_for_glyph = fallback_text(code, cfg.glyph_mapping, font)
 
@@ -63,7 +68,7 @@ def render_code(
         style="material",
         font_size=14,
         line_numbers=False,
-        font_name=_find_mono_font_path() or "DejaVuSansMono",
+        font_name=_find_mono_font_path(data_dir) or "DejaVuSansMono",
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
 
@@ -80,13 +85,16 @@ def render_code(
     return png_path, txt_path
 
 
-def _load_mono_font() -> ImageFont.FreeTypeFont | None:
+def _load_mono_font(data_dir: str) -> ImageFont.FreeTypeFont | None:
     """加载等宽字体用于字形检测。
+
+    Args:
+        data_dir: 插件数据目录路径。
 
     Returns:
         PIL 字体对象，未找到合适字体返回 None。
     """
-    path = _find_mono_font_path()
+    path = _find_mono_font_path(data_dir)
     if path:
         return ImageFont.truetype(path, 14)
     return ImageFont.load_default()
