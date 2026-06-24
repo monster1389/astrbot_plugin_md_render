@@ -32,7 +32,6 @@ from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noq
 from render.utils import load_config  # noqa: E402
 
 _FONT_URLS = [
-    "https://ghproxy.com/https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
     "https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
 ]
 
