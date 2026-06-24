@@ -21,6 +21,7 @@ if _plugin_dir not in sys.path:
 
 from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
 from render.chain import build_chain, split_chain  # noqa: E402
+from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 
 
 @register(
@@ -45,6 +46,8 @@ class MdRenderPlugin(Star):
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
         temp_dir = os.path.join(data_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
+        ttl = int(self.config.get("临时文件存活", 5))
+        _start_cleaner(str(data_dir), ttl)
         logger.info("Markdown 渲染插件已启动")
 
     @filter.on_decorating_result(priority=1000)
@@ -120,4 +123,5 @@ class MdRenderPlugin(Star):
 
     async def terminate(self):
         """插件销毁。"""
+        await _stop_cleaner()
         logger.info("Markdown 渲染插件已卸载")
