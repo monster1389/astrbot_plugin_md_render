@@ -26,8 +26,12 @@ class TestRenderExpr:
     @patch("render.expr.find_font_path", return_value=None)
     @patch("render.expr.Image")
     @patch("render.expr.RenderLaTeX")
-    def test_inline_expr(self, mock_render, mock_pil_image, mock_font_path):
-        """行内表达式渲染返回 png 路径，传入原始表达式不含 $ 分隔符。"""
+    @patch("render.expr.GetLaTeXObjs")
+    def test_inline_expr(self, mock_getlatex, mock_render, mock_pil_image, mock_font_path):
+        """行内表达式渲染返回 png 路径，先解析 LaTeX 再渲染。"""
+        parsed = MagicMock()
+        mock_getlatex.return_value = parsed
+
         mock_render_img = MagicMock()
         mock_render_img.size = (100, 20)
         mock_alpha = MagicMock()
@@ -43,14 +47,19 @@ class TestRenderExpr:
 
         assert png_path.endswith(".png")
         assert os.path.basename(png_path).startswith("expr_")
-        mock_render.assert_called_once_with("E=mc^2")
+        mock_getlatex.assert_called_once_with("E=mc^2")
+        mock_render.assert_called_once_with(parsed)
         mock_result.save.assert_called_once()
 
     @patch("render.expr.find_font_path", return_value=None)
     @patch("render.expr.Image")
     @patch("render.expr.RenderLaTeX")
-    def test_block_expr(self, mock_render, mock_pil_image, mock_font_path):
-        """块级表达式渲染，传入原始表达式不含 \\[ \\] 分隔符。"""
+    @patch("render.expr.GetLaTeXObjs")
+    def test_block_expr(self, mock_getlatex, mock_render, mock_pil_image, mock_font_path):
+        """块级表达式渲染，先解析 LaTeX 再渲染。"""
+        parsed = MagicMock()
+        mock_getlatex.return_value = parsed
+
         mock_render_img = MagicMock()
         mock_render_img.size = (200, 30)
         mock_alpha = MagicMock()
@@ -66,7 +75,8 @@ class TestRenderExpr:
 
         assert png_path.endswith(".png")
         assert os.path.basename(png_path).startswith("expr_")
-        mock_render.assert_called_once_with(
+        mock_getlatex.assert_called_once_with(
             "\\int_0^\\infty e^{-x} dx = 1"
         )
+        mock_render.assert_called_once_with(parsed)
         mock_result.save.assert_called_once()
