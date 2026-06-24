@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 
+from render.glyph import load_glyph_mapping
+
 
 @dataclass(frozen=True)
 class RenderConfig:
@@ -40,13 +42,13 @@ def load_config(raw: dict) -> RenderConfig:
         RenderConfig 实例。
     """
     return RenderConfig(
-        code_mode=raw.get("代码块", "不处理"),
-        table_mode=raw.get("表格", "不处理"),
-        expr_mode=raw.get("表达式", "不处理"),
+        code_mode=raw.get("代码块", "渲染且txt"),
+        table_mode=raw.get("表格", "渲染图像"),
+        expr_mode=raw.get("表达式", "渲染图像"),
         divider_mode=raw.get("分隔线", "不处理"),
         font_color=parse_color(raw.get("字体颜色", "#9CDCFE (浅蓝)")),
         bg_color=parse_color(raw.get("背景颜色", "#1E1E1E (VS Code 深色)")),
-        glyph_mapping=raw.get("字形映射", {}),
+        glyph_mapping=load_glyph_mapping(raw.get("字形映射", "{}")),
         temp_ttl=int(raw.get("临时文件存活", 5)),
     )
 

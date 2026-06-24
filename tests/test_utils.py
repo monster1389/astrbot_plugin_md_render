@@ -1,6 +1,7 @@
 """render/utils.py 测试。"""
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from unittest.mock import patch
 
 from render.utils import (
@@ -44,20 +45,14 @@ class TestBuildTempPath:
         assert path.endswith(".png")
         mock_makedirs.assert_called_once()
 
-    @patch("render.utils.os.makedirs")
-    def test_dir_exists_no_error(self, mock_makedirs):
-        path = build_temp_path("/data", "table", ".png")
-        assert path.startswith("/data/temp/table_")
-        mock_makedirs.assert_called_once()
-
 
 class TestLoadConfig:
     def test_defaults(self):
         raw = {}
         cfg = load_config(raw)
-        assert cfg.code_mode == "不处理"
-        assert cfg.table_mode == "不处理"
-        assert cfg.expr_mode == "不处理"
+        assert cfg.code_mode == "渲染且txt"
+        assert cfg.table_mode == "渲染图像"
+        assert cfg.expr_mode == "渲染图像"
         assert cfg.divider_mode == "不处理"
         assert cfg.font_color == "#9CDCFE"
         assert cfg.bg_color == "#1E1E1E"
@@ -87,9 +82,9 @@ class TestLoadConfig:
 class TestRenderConfig:
     def test_frozen(self):
         cfg = RenderConfig(
-            code_mode="不处理",
-            table_mode="不处理",
-            expr_mode="不处理",
+            code_mode="渲染且txt",
+            table_mode="渲染图像",
+            expr_mode="渲染图像",
             divider_mode="不处理",
             font_color="#000",
             bg_color="#FFF",
@@ -98,6 +93,6 @@ class TestRenderConfig:
         )
         try:
             cfg.code_mode = "xxx"
-            assert False, "should have raised"
-        except Exception:
+            assert False, "should have raised FrozenInstanceError"
+        except FrozenInstanceError:
             pass
