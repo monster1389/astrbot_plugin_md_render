@@ -4,7 +4,7 @@ Pillow>=11.0
 pillowlatex>=0.1.4
 Pygments>=2.18
 
-py7zr>=0.21
+py7zr>=1.0
 
 # dev
 pytest>=9.0
