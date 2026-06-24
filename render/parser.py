@@ -270,7 +270,7 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
                        "td_open", "td_close", "tr_open", "tr_close",
                        "math_inline", "math_block"):
             if t.type == "paragraph_close":
-                flush_buf()
+                text_buf.append("\n\n")
             i += 1
             continue
 
