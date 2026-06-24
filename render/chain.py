@@ -21,7 +21,7 @@ from render.table import render_table
 
 
 def build_chain(
-    segments: list,
+    segments: list[Any],
     config: dict,
     data_dir: str,
 ) -> list[dict[str, Any]]:
@@ -87,7 +87,7 @@ def _append_code(
     if mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
     chain.append({"type": "Image", "path": png_path})
-    if mode in ("渲染图像", "渲染且保留原文", "渲染且txt"):
+    if mode in ("渲染且保留原文", "渲染且txt"):
         chain.append({"type": "File", "path": txt_path})
 
 

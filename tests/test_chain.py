@@ -1,7 +1,7 @@
 """消息链组装与分段测试。"""
 from unittest.mock import patch
 
-from render.parser import CodeBlock, Divider, Segment, Table
+from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment, Table
 
 
 class TestBuildChain:
@@ -51,9 +51,8 @@ class TestBuildChain:
             "分隔线": "不处理",
         }
         result = build_chain(segments, config, "/tmp")
-        assert len(result) == 2  # Image + File
+        assert len(result) == 1  # Image only, no File
         assert result[0]["type"] == "Image"
-        assert result[1]["type"] == "File"
 
     @patch("render.chain.render_code")
     def test_code_render_with_txt(self, mock_render):
@@ -121,6 +120,41 @@ class TestBuildChain:
         result = build_chain(segments, config, "/tmp")
         types = [c["type"] for c in result]
         assert "divider" in types
+
+    @patch("render.chain.render_inline_expr")
+    def test_inline_expr_render_image(self, mock_render):
+        """行内表达式渲染图像模式。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = "/tmp/expr_001.png"
+        segments = [InlineExpr(expr="E=mc^2")]
+        config = {
+            "代码块": "不处理",
+            "表格": "不处理",
+            "表达式": "渲染图像",
+            "分隔线": "不处理",
+        }
+        result = build_chain(segments, config, "/tmp")
+        assert len(result) == 1
+        assert result[0]["type"] == "Image"
+
+    @patch("render.chain.render_block_expr")
+    def test_block_expr_noop(self, mock_render):
+        """块级表达式不处理：还原为 markdown 原文。"""
+        from render.chain import build_chain
+
+        segments = [BlockExpr(expr="\\int x dx")]
+        config = {
+            "代码块": "不处理",
+            "表格": "不处理",
+            "表达式": "不处理",
+            "分隔线": "不处理",
+        }
+        result = build_chain(segments, config, "/tmp")
+        assert len(result) == 1
+        assert result[0]["type"] == "Plain"
+        assert "$$" in result[0]["text"]
+        mock_render.assert_not_called()
 
 
 class TestSplitChain:
