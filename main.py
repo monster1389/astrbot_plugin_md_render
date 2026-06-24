@@ -1,24 +1,119 @@
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
+"""AstrBot Markdown 渲染插件。
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
-    def __init__(self, context: Context):
+在 OnDecoratingResultEvent 阶段拦截消息链，将 markdown 代码块、表格、
+数学表达式渲染为图片后替换到消息链中。
+"""
+from __future__ import annotations
+
+import os
+import sys
+from typing import Any
+
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.message_components import Comp
+from astrbot.api.star import Context, Star, StarTools, register
+
+_plugin_dir = os.path.dirname(os.path.abspath(__file__))
+if _plugin_dir not in sys.path:
+    sys.path.insert(0, _plugin_dir)
+
+from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
+from render.chain import build_chain, split_chain  # noqa: E402
+
+
+@register(
+    "astrbot_plugin_md_render",
+    "monster1389",
+    "Markdown 渲染插件",
+    "1.0.0",
+)
+class MdRenderPlugin(Star):
+    """将 QQ 消息中的 markdown 代码块、表格、数学表达式渲染为图片。
+
+    Attributes:
+        config: AstrBot 原始配置字典。
+    """
+
+    def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
+        self.config: dict[str, Any] = config or {}
 
     async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
+        """插件初始化。"""
+        data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
+        temp_dir = os.path.join(data_dir, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        logger.info("Markdown 渲染插件已启动")
 
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+    @filter.on_decorating_result(priority=1000)
+    async def on_decorating_result(self, event: AstrMessageEvent):
+        """装饰结果事件：解析 Plain 文本，渲染 markdown 元素并替换到 chain。
+
+        Args:
+            event: AstrBot 消息事件。
+        """
+        result = event.get_result()
+        chain = result.chain
+        if not chain:
+            return
+
+        data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
+
+        # 收集所有 Plain 文本，拼接后统一解析
+        text_parts: list[str] = []
+        for comp in chain:
+            if hasattr(comp, "text") and type(comp).__name__ == "Plain":
+                text_parts.append(comp.text or "")
+            elif hasattr(comp, "type") and comp.type == "Plain":
+                text_parts.append(comp.text or "")
+
+        full_text = "".join(text_parts)
+        if not full_text.strip():
+            return
+
+        # 解析 → 组装 chain
+        segments = parse(full_text)
+
+        # 检查是否需要处理
+        has_elements = any(
+            isinstance(s, (CodeBlock, Table, InlineExpr, BlockExpr, Divider))
+            for s in segments
+        )
+        if not has_elements:
+            return
+
+        built = build_chain(segments, self.config, data_dir)
+        front_segments, last_segment = split_chain(built)
+
+        # 前置段逐段发送
+        for seg_group in front_segments:
+            comps = self._to_comp_list(seg_group)
+            if comps:
+                yield event.chain_result(comps)
+
+        # 末段放回 chain 交给 RespondStage
+        result.chain = self._to_comp_list(last_segment)
+
+    def _to_comp_list(self, seg_group: list[dict[str, Any]]) -> list:
+        """将内部 chain 结构转换为 AstrBot Component 列表。
+
+        Args:
+            seg_group: build_chain 输出的消息段。
+
+        Returns:
+            AstrBot Component 对象列表。
+        """
+        comps: list[Any] = []
+        for item in seg_group:
+            if item["type"] == "Plain":
+                comps.append(Comp.Plain(item["text"]))
+            elif item["type"] == "Image":
+                comps.append(Comp.Image.fromFileSystem(item["path"]))
+            elif item["type"] == "File":
+                comps.append(Comp.File.fromFileSystem(item["path"]))
+        return comps
 
     async def terminate(self):
-        """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+        """插件销毁。"""
+        logger.info("Markdown 渲染插件已卸载")
