@@ -119,7 +119,7 @@ class MdRenderPlugin(Star):
             elif hasattr(comp, "type") and comp.type == "Plain":
                 text_parts.append(comp.text or "")
 
-        full_text = "".join(text_parts)
+        full_text = "\n".join(text_parts)
         if not full_text.strip():
             return
 
