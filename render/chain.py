@@ -18,11 +18,12 @@ from render.parser import (
     Table,
 )
 from render.table import render_table
+from render.utils import RenderConfig
 
 
 def build_chain(
     segments: list[Any],
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> list[dict[str, Any]]:
     """将解析后的 Segment 列表转换为统一的消息链结构。
@@ -32,29 +33,25 @@ def build_chain(
 
     Args:
         segments: parser.parse() 输出的 Segment 列表。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径，用于存放渲染产物。
 
     Returns:
         消息链结构列表。
     """
-    code_mode = config.get("代码块", "渲染且txt")
-    table_mode = config.get("表格", "渲染图像")
-    expr_mode = config.get("表达式", "渲染图像")
-    divider_mode = config.get("分隔线", "不处理")
     chain: list[dict[str, Any]] = []
 
     for seg in segments:
         if isinstance(seg, CodeBlock):
-            _append_code(chain, seg, code_mode, config, data_dir)
+            _append_code(chain, seg, cfg, data_dir)
         elif isinstance(seg, Table):
-            _append_table(chain, seg, table_mode, config, data_dir)
+            _append_table(chain, seg, cfg, data_dir)
         elif isinstance(seg, InlineExpr):
-            _append_inline_expr(chain, seg, expr_mode, config, data_dir)
+            _append_inline_expr(chain, seg, cfg, data_dir)
         elif isinstance(seg, BlockExpr):
-            _append_block_expr(chain, seg, expr_mode, config, data_dir)
+            _append_block_expr(chain, seg, cfg, data_dir)
         elif isinstance(seg, Divider):
-            if divider_mode == "切分":
+            if cfg.divider_mode == "切分":
                 chain.append({"type": "divider"})
         elif isinstance(seg, Segment):
             chain.append({"type": "Plain", "text": seg.text})
@@ -65,8 +62,7 @@ def build_chain(
 def _append_code(
     chain: list[dict[str, Any]],
     seg: CodeBlock,
-    mode: str,
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> None:
     """按代码块处理模式将渲染结果追加到 chain。
@@ -74,28 +70,27 @@ def _append_code(
     Args:
         chain: 目标消息链列表。
         seg: CodeBlock 实例。
-        mode: 处理模式（不处理/渲染图像/渲染且保留原文/渲染且txt）。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
     """
+    mode = cfg.code_mode
     if mode == "不处理":
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
         return
 
-    png_path, txt_path = render_code(seg, config, data_dir)
+    png_path, txt_path = render_code(seg, cfg, data_dir)
 
     if mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
     chain.append({"type": "Image", "path": png_path})
-    if mode in ("渲染且保留原文", "渲染且txt"):
+    if mode == "渲染且txt":
         chain.append({"type": "File", "path": txt_path})
 
 
 def _append_table(
     chain: list[dict[str, Any]],
     seg: Table,
-    mode: str,
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> None:
     """按表格处理模式将渲染结果追加到 chain。
@@ -103,18 +98,17 @@ def _append_table(
     Args:
         chain: 目标消息链列表。
         seg: Table 实例。
-        mode: 处理模式（不处理/渲染图像/渲染且保留原文）。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
     """
-    if mode == "不处理":
+    if cfg.table_mode == "不处理":
         text = _table_to_text(seg)
         chain.append({"type": "Plain", "text": text})
         return
 
-    png_path = render_table(seg, config, data_dir)
+    png_path = render_table(seg, cfg, data_dir)
 
-    if mode == "渲染且保留原文":
+    if cfg.table_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": _table_to_text(seg)})
     chain.append({"type": "Image", "path": png_path})
 
@@ -122,8 +116,7 @@ def _append_table(
 def _append_inline_expr(
     chain: list[dict[str, Any]],
     seg: InlineExpr,
-    mode: str,
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> None:
     """按表达式处理模式将行内表达式渲染结果追加到 chain。
@@ -131,17 +124,16 @@ def _append_inline_expr(
     Args:
         chain: 目标消息链列表。
         seg: InlineExpr 实例。
-        mode: 处理模式（不处理/渲染图像/渲染且保留原文）。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
     """
-    if mode == "不处理":
+    if cfg.expr_mode == "不处理":
         chain.append({"type": "Plain", "text": f"${seg.expr}$"})
         return
 
-    png_path = render_inline_expr(seg, config, data_dir)
+    png_path = render_inline_expr(seg, cfg, data_dir)
 
-    if mode == "渲染且保留原文":
+    if cfg.expr_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"${seg.expr}$"})
     chain.append({"type": "Image", "path": png_path})
 
@@ -149,8 +141,7 @@ def _append_inline_expr(
 def _append_block_expr(
     chain: list[dict[str, Any]],
     seg: BlockExpr,
-    mode: str,
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> None:
     """按表达式处理模式将块级表达式渲染结果追加到 chain。
@@ -158,17 +149,16 @@ def _append_block_expr(
     Args:
         chain: 目标消息链列表。
         seg: BlockExpr 实例。
-        mode: 处理模式（不处理/渲染图像/渲染且保留原文）。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
     """
-    if mode == "不处理":
+    if cfg.expr_mode == "不处理":
         chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
         return
 
-    png_path = render_block_expr(seg, config, data_dir)
+    png_path = render_block_expr(seg, cfg, data_dir)
 
-    if mode == "渲染且保留原文":
+    if cfg.expr_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
     chain.append({"type": "Image", "path": png_path})
 

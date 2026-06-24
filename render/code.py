@@ -5,26 +5,26 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
 
 from PIL import ImageFont
 from pygments import highlight
 from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer
 
-from render.glyph import fallback_text, load_glyph_mapping
+from render.glyph import fallback_text
+from render.utils import RenderConfig, build_temp_path, find_font_path
 
 
 def render_code(
     codeblock: object,
-    config: dict,
+    cfg: RenderConfig,
     data_dir: str,
 ) -> tuple[str, str]:
     """渲染代码块为 PNG 图片和 TXT 文本文件。
 
     Args:
         codeblock: CodeBlock 实例，含 lang 和 code 属性。
-        config: 插件配置字典。
+        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
 
     Returns:
@@ -33,10 +33,9 @@ def render_code(
     lang: str = getattr(codeblock, "lang", "") or ""
     code: str = getattr(codeblock, "code", "")
 
-    glyph_mapping = load_glyph_mapping(config.get("字形映射", "{}"))
     font = _load_mono_font()
 
-    code_for_glyph = fallback_text(code, glyph_mapping, font)
+    code_for_glyph = fallback_text(code, cfg.glyph_mapping, font)
 
     # pygments 语法高亮 → 图片
     try:
@@ -47,19 +46,17 @@ def render_code(
         style="material",
         font_size=14,
         line_numbers=False,
+        font_name=find_font_path(),
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
 
     # 写入 PNG
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_dir = os.path.join(data_dir, "temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    png_path = os.path.join(temp_dir, f"code_{ts}.png")
+    png_path = build_temp_path(data_dir, "code", ".png")
     with open(png_path, "wb") as f:
         f.write(png_data)
 
     # 写入 TXT
-    txt_path = os.path.join(temp_dir, f"code_{ts}.txt")
+    txt_path = build_temp_path(data_dir, "code", ".txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(code)
 
