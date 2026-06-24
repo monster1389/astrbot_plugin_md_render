@@ -13,9 +13,22 @@ from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer
 
 from render.glyph import fallback_text
-from render.utils import RenderConfig, build_temp_path, find_font_path
+from render.utils import RenderConfig, build_temp_path
 
 logger = logging.getLogger(__name__)
+
+# 等宽字体候选路径
+_MONO_FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+]
+
+
+def _find_mono_font_path() -> str | None:
+    """返回第一个可用的等宽字体路径，都不存在返回 None。"""
+    for path in _MONO_FONT_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def render_code(
@@ -50,7 +63,7 @@ def render_code(
         style="material",
         font_size=14,
         line_numbers=False,
-        font_name=find_font_path(),
+        font_name=_find_mono_font_path() or "DejaVuSansMono",
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
 
@@ -68,15 +81,12 @@ def render_code(
 
 
 def _load_mono_font() -> ImageFont.FreeTypeFont | None:
-    """加载等宽字体，优先文泉驿微米黑等宽。
+    """加载等宽字体用于字形检测。
 
     Returns:
         PIL 字体对象，未找到合适字体返回 None。
     """
-    candidate = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
-    if os.path.exists(candidate):
-        return ImageFont.truetype(candidate, 14)
-    try:
-        return ImageFont.truetype("DejaVuSansMono", 14)
-    except (OSError, IOError):
-        return ImageFont.load_default()
+    path = _find_mono_font_path()
+    if path:
+        return ImageFont.truetype(path, 14)
+    return ImageFont.load_default()
