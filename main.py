@@ -90,6 +90,21 @@ class MdRenderPlugin(Star):
 
         cfg = load_config(self.config)
         built = build_chain(segments, cfg, data_dir)
+
+        # 汇总日志（0 则静默）
+        image_count = sum(1 for item in built if item["type"] == "Image")
+        file_count = sum(1 for item in built if item["type"] == "File")
+        total = image_count + file_count
+        if total > 0:
+            parts: list[str] = []
+            if cfg.code_mode != "不处理":
+                parts.append(f"代码块({cfg.code_mode})")
+            if cfg.table_mode != "不处理":
+                parts.append(f"表格({cfg.table_mode})")
+            if cfg.expr_mode != "不处理":
+                parts.append(f"表达式({cfg.expr_mode})")
+            logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
+
         front_segments, last_segment = split_chain(built)
 
         # 前置段逐段发送

@@ -5,6 +5,7 @@ split_chain: 以 Plain 为锚点自然分段，末段留给 RespondStage。
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from render.code import render_code
@@ -19,6 +20,8 @@ from render.parser import (
 )
 from render.table import render_table
 from render.utils import RenderConfig
+
+logger = logging.getLogger(__name__)
 
 
 def build_chain(
@@ -78,7 +81,15 @@ def _append_code(
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
         return
 
-    png_path, txt_path = render_code(seg, cfg, data_dir)
+    try:
+        png_path, txt_path = render_code(seg, cfg, data_dir)
+    except Exception:
+        logger.warning(
+            "代码块渲染失败，已回退为原文: %s", seg.lang,
+            exc_info=True,
+        )
+        chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
+        return
 
     if mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
@@ -106,7 +117,12 @@ def _append_table(
         chain.append({"type": "Plain", "text": text})
         return
 
-    png_path = render_table(seg, cfg, data_dir)
+    try:
+        png_path = render_table(seg, cfg, data_dir)
+    except Exception:
+        logger.warning("表格渲染失败，已回退为原文", exc_info=True)
+        chain.append({"type": "Plain", "text": _table_to_text(seg)})
+        return
 
     if cfg.table_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": _table_to_text(seg)})
@@ -131,7 +147,15 @@ def _append_inline_expr(
         chain.append({"type": "Plain", "text": f"${seg.expr}$"})
         return
 
-    png_path = render_inline_expr(seg, cfg, data_dir)
+    try:
+        png_path = render_inline_expr(seg, cfg, data_dir)
+    except Exception:
+        logger.warning(
+            "行内表达式渲染失败，已回退为原文: %s", seg.expr[:30],
+            exc_info=True,
+        )
+        chain.append({"type": "Plain", "text": f"${seg.expr}$"})
+        return
 
     if cfg.expr_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"${seg.expr}$"})
@@ -156,7 +180,15 @@ def _append_block_expr(
         chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
         return
 
-    png_path = render_block_expr(seg, cfg, data_dir)
+    try:
+        png_path = render_block_expr(seg, cfg, data_dir)
+    except Exception:
+        logger.warning(
+            "块级表达式渲染失败，已回退为原文: %s", seg.expr[:30],
+            exc_info=True,
+        )
+        chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
+        return
 
     if cfg.expr_mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})

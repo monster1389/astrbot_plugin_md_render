@@ -167,3 +167,41 @@ class TestSplitChain:
         assert front[0][0]["text"] == "上"
         assert len(last) == 1
         assert last[0]["text"] == "下"
+
+    @patch("render.chain.render_code")
+    def test_code_render_failure_fallback(self, mock_render):
+        """代码块渲染失败时回退为 Plain 原文，不影响后续段落。"""
+        from render.chain import build_chain
+        from render.utils import RenderConfig
+
+        mock_render.side_effect = RuntimeError("Pygments crashed")
+        cfg = RenderConfig(
+            code_mode="渲染图像", table_mode="不处理",
+            expr_mode="不处理", divider_mode="不处理",
+            font_color="#000", bg_color="#FFF",
+            glyph_mapping={}, temp_ttl=5,
+        )
+        segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
+        result = build_chain(segments, cfg, "/tmp")
+        assert result[0]["type"] == "Plain"
+        assert "```py" in result[0]["text"]
+        assert result[1]["type"] == "Plain"
+        assert result[1]["text"] == "后续文本"
+
+    @patch("render.chain.render_code")
+    def test_code_render_failure_keep_original_mode(self, mock_render):
+        """渲染且保留原文模式下渲染失败，只回退为原文（不重复）。"""
+        from render.chain import build_chain
+        from render.utils import RenderConfig
+
+        mock_render.side_effect = RuntimeError("Pygments crashed")
+        cfg = RenderConfig(
+            code_mode="渲染且保留原文", table_mode="不处理",
+            expr_mode="不处理", divider_mode="不处理",
+            font_color="#000", bg_color="#FFF",
+            glyph_mapping={}, temp_ttl=5,
+        )
+        segments = [CodeBlock(lang="py", code="x=1")]
+        result = build_chain(segments, cfg, "/tmp")
+        assert len(result) == 1
+        assert result[0]["type"] == "Plain"

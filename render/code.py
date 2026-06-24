@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from PIL import ImageFont
@@ -13,6 +14,8 @@ from pygments.lexers import get_lexer_by_name, guess_lexer
 
 from render.glyph import fallback_text
 from render.utils import RenderConfig, build_temp_path, find_font_path
+
+logger = logging.getLogger(__name__)
 
 
 def render_code(
@@ -41,6 +44,7 @@ def render_code(
     try:
         lexer = get_lexer_by_name(lang)
     except Exception:
+        logger.warning("代码块语言 '%s' 无对应 lexer，已回退到 guess_lexer", lang)
         lexer = guess_lexer(code)
     formatter = ImageFormatter(
         style="material",

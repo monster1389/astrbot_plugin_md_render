@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import logging
+
 import matplotlib
 from matplotlib.font_manager import FontProperties
 from PIL import ImageFont
@@ -13,6 +15,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from render.glyph import fallback_text
 from render.utils import RenderConfig, build_temp_path, find_font_path
+
+logger = logging.getLogger(__name__)
 
 
 def render_table(
@@ -34,6 +38,8 @@ def render_table(
     rows: list[list[str]] = getattr(table, "rows", [])
 
     font_path = find_font_path()
+    if font_path is None:
+        logger.warning("未找到 CJK 字体，表格中文可能显示为豆腐块")
     font = ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
 
     # 字形回退
