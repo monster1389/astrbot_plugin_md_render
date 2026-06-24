@@ -54,7 +54,8 @@ def render_code(
     lang: str = getattr(codeblock, "lang", "") or ""
     code: str = getattr(codeblock, "code", "")
 
-    font = _load_mono_font(data_dir)
+    mono_path = _find_mono_font_path(data_dir)
+    font = ImageFont.truetype(mono_path, 14) if mono_path else ImageFont.load_default()
 
     code_for_glyph = fallback_text(code, cfg.glyph_mapping, font)
 
@@ -70,7 +71,7 @@ def render_code(
         line_numbers=False,
         image_pad=10,
         line_pad=4,
-        font_name=_find_mono_font_path(data_dir) or "DejaVuSansMono",
+        font_name=mono_path or "DejaVuSansMono",
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
 
@@ -87,16 +88,3 @@ def render_code(
     return png_path, txt_path
 
 
-def _load_mono_font(data_dir: str) -> ImageFont.FreeTypeFont | None:
-    """加载等宽字体用于字形检测。
-
-    Args:
-        data_dir: 插件数据目录路径。
-
-    Returns:
-        PIL 字体对象，未找到合适字体返回 None。
-    """
-    path = _find_mono_font_path(data_dir)
-    if path:
-        return ImageFont.truetype(path, 14)
-    return ImageFont.load_default()

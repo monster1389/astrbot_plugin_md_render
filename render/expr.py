@@ -28,7 +28,7 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
         png_path 渲染产物文件路径。
     """
     # 字形回退
-    font_path = find_font_path()
+    font_path = find_font_path(data_dir)
     if cfg.glyph_mapping and font_path:
         font = ImageFont.truetype(font_path, size=20)
         latex_src = fallback_text(latex_src, cfg.glyph_mapping, font)
