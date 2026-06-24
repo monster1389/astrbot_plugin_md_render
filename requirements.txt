@@ -1,0 +1,9 @@
+markdown-it-py>=4.0
+matplotlib>=3.8
+Pillow>=11.0
+pillowlatex>=0.1.4
+Pygments>=2.18
+
+# dev
+pytest>=9.0
+ruff>=0.15
