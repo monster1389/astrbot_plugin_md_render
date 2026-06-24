@@ -5,9 +5,12 @@
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import os
+import shutil
 import sys
+import tempfile
 import urllib.request
 from typing import Any
 
@@ -29,8 +32,8 @@ from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noq
 from render.utils import load_config  # noqa: E402
 
 _FONT_URLS = [
-    "https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
     "https://ghproxy.com/https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
+    "https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
 ]
 
 
@@ -50,7 +53,14 @@ def _download_sarasa_font(fonts_dir: str) -> bool:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 data = resp.read()
             with py7zr.SevenZipFile(io.BytesIO(data)) as archive:
-                archive.extract(path=fonts_dir, targets=["SarasaMonoSC-Regular.ttf"])
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    archive.extract(path=tmpdir, targets=["SarasaMonoSC-Regular.ttf"])
+                    src = os.path.join(tmpdir, "SarasaMonoSC-Regular.ttf")
+                    if os.path.exists(src):
+                        dst = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
+                        shutil.move(src, dst)
+                    else:
+                        raise FileNotFoundError("SarasaMonoSC-Regular.ttf 未在压缩包中找到")
             logger.info("更纱字体下载成功，已保存至 %s", os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf"))
             return True
         except Exception:
@@ -84,7 +94,7 @@ class MdRenderPlugin(Star):
         os.makedirs(fonts_dir, exist_ok=True)
         font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
         if not os.path.exists(font_path):
-            _download_sarasa_font(fonts_dir)
+            asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
         cfg = load_config(self.config)
         _start_cleaner(str(data_dir), cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
