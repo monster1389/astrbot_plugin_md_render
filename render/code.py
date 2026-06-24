@@ -72,7 +72,7 @@ def _load_mono_font() -> ImageFont.FreeTypeFont | None:
     Returns:
         PIL 字体对象，未找到合适字体返回 None。
     """
-    candidate = "/usr/share/fonts/truetype/wqy/wqy-microhei-mono.ttc"
+    candidate = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
     if os.path.exists(candidate):
         return ImageFont.truetype(candidate, 14)
     try:

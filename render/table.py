@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 
 import matplotlib
+from matplotlib.font_manager import FontProperties
 from PIL import ImageFont
 
 matplotlib.use("Agg")
@@ -17,15 +18,27 @@ from render.glyph import fallback_text, load_glyph_mapping
 
 
 def _parse_color(value: str) -> str:
-    """从 '#HEX (描述)' 格式的配置值中提取 hex 颜色。
+    """从 '#HEX (描述)' 格式的配置值中提取 hex 颜色。"""
+    return value.split(" ")[0]
 
-    Args:
-        value: 形如 '#9CDCFE (浅蓝)' 的字符串。
+
+def _find_font_path() -> str | None:
+    """查找可用的 CJK 字体，退化为 DejaVu Sans Mono。
 
     Returns:
-        纯 hex 字符串，如 '#9CDCFE'。
+        字体文件路径，找不到返回 None。
     """
-    return value.split(" ")[0]
+    candidates = [
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def render_table(
@@ -49,17 +62,20 @@ def render_table(
     font_color = _parse_color(config.get("字体颜色", "#9CDCFE (浅蓝)"))
     bg_color = _parse_color(config.get("背景颜色", "#1E1E1E (VS Code 深色)"))
     glyph_mapping = load_glyph_mapping(config.get("字形映射", "{}"))
-    font = _load_table_font()
+
+    font_path = _find_font_path()
+    font = ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
 
     # 字形回退
     headers = [fallback_text(h, glyph_mapping, font) for h in headers]
     rows = [[fallback_text(cell, glyph_mapping, font) for cell in row] for row in rows]
 
-    n_rows = len(rows) + 1  # +1 表头行
+    n_rows = len(rows) + 1
     n_cols = max(len(headers), 1)
 
     fig, ax = plt.subplots(figsize=(n_cols * 2.5, n_rows * 0.45 + 0.3))
     fig.patch.set_facecolor(bg_color)
+    ax.set_facecolor(bg_color)
 
     cell_text = [headers] + rows
     tbl = ax.table(
@@ -70,15 +86,21 @@ def render_table(
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(11)
 
+    font_prop = FontProperties(fname=font_path) if font_path else None
+
     for (r, c), cell in tbl.get_celld().items():
         cell.set_facecolor(bg_color)
         cell.set_edgecolor(font_color)
-        cell.set_text_props(color=font_color, fontname="sans-serif")
-        if r == 0:
+        if r == 0 and font_prop:
+            cell.set_text_props(weight="bold", color=font_color, fontproperties=font_prop)
+        elif r == 0:
             cell.set_text_props(weight="bold", color=font_color)
+        elif font_prop:
+            cell.set_text_props(color=font_color, fontproperties=font_prop)
+        else:
+            cell.set_text_props(color=font_color)
 
     ax.axis("off")
-    ax.set_facecolor(bg_color)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     temp_dir = os.path.join(data_dir, "temp")
@@ -88,18 +110,3 @@ def render_table(
     plt.close(fig)
 
     return png_path
-
-
-def _load_table_font() -> ImageFont.FreeTypeFont | None:
-    """加载表格用字体，优先中文字体。
-
-    Returns:
-        PIL 字体对象，未找到返回 None。
-    """
-    candidate = "/usr/share/fonts/truetype/wqy/wqy-microhei-mono.ttc"
-    if os.path.exists(candidate):
-        return ImageFont.truetype(candidate, 14)
-    try:
-        return ImageFont.truetype("DejaVuSansMono", 14)
-    except (OSError, IOError):
-        return None

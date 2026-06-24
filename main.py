@@ -10,8 +10,9 @@ import sys
 from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
+from astrbot.api.all import MessageChain
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Comp
+from astrbot.api.message_components import Plain, Image, File as AstrFile
 from astrbot.api.star import Context, Star, StarTools, register
 
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +91,7 @@ class MdRenderPlugin(Star):
         for seg_group in front_segments:
             comps = self._to_comp_list(seg_group)
             if comps:
-                yield event.chain_result(comps)
+                await event.send(MessageChain(comps))
 
         # 末段放回 chain 交给 RespondStage
         result.chain = self._to_comp_list(last_segment)
@@ -107,11 +108,14 @@ class MdRenderPlugin(Star):
         comps: list[Any] = []
         for item in seg_group:
             if item["type"] == "Plain":
-                comps.append(Comp.Plain(item["text"]))
+                comps.append(Plain(item["text"]))
             elif item["type"] == "Image":
-                comps.append(Comp.Image.fromFileSystem(item["path"]))
+                comps.append(Image.fromFileSystem(item["path"]))
             elif item["type"] == "File":
-                comps.append(Comp.File.fromFileSystem(item["path"]))
+                comps.append(AstrFile(
+                    name=os.path.basename(item["path"]),
+                    file=item["path"],
+                ))
         return comps
 
     async def terminate(self):

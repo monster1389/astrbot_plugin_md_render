@@ -4,16 +4,12 @@ from unittest.mock import MagicMock, patch
 
 from render.parser import Table
 
-
-def _mock_font(*args, **kwargs):
-    font = MagicMock()
-    font.font.get_char_index.return_value = 1  # glyph exists
-    return font
+_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 class TestRenderTable:
     @patch("render.table.plt")
-    @patch("render.table._load_table_font", side_effect=_mock_font)
+    @patch("render.table._find_font_path", return_value=_FONT_PATH)
     def test_renders_simple_table(self, mock_font, mock_plt):
         """简单表格渲染返回 png 路径。"""
         mock_fig = MagicMock()
@@ -35,7 +31,7 @@ class TestRenderTable:
         mock_plt.close.assert_called_once()
 
     @patch("render.table.plt")
-    @patch("render.table._load_table_font", side_effect=_mock_font)
+    @patch("render.table._find_font_path", return_value=_FONT_PATH)
     def test_empty_table(self, mock_font, mock_plt):
         """空表格也能渲染。"""
         mock_fig = MagicMock()
