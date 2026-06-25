@@ -115,4 +115,4 @@ RespondStage 发送最终 chain
 
 ### 设计文档
 
-完整设计见 `docs/designs/md_render_plugin_final.md`。
+设计文档见 `docs/designs/`，注意部分内容可能过时，以当前代码为准。
