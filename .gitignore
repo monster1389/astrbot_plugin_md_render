@@ -213,6 +213,7 @@ __marimo__/
 .tmp*/
 
 # Plugin runtime data files
+data/
 character_map.json
 
 # Superpowers design docs
