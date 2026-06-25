@@ -106,8 +106,7 @@ def render_table(
             x = sum(col_widths[:c])
             w = col_widths[c]
 
-            if c > 0:
-                draw.line([(x, y), (x, y + rh)], fill=_RGB_GRID, width=1 * _DPI)
+            draw.line([(x, y), (x, y + rh)], fill=_RGB_GRID, width=1 * _DPI)
 
             is_header = r == 0 and bool(headers)
             bg = _RGB_HEADER_BG if is_header else _RGB_BG
@@ -121,7 +120,7 @@ def render_table(
                 color = _span_color(span)
 
                 draw.text((cursor, baseline), span.text, fill=color, font=font)
-                bbox = font_reg.getbbox(span.text)
+                bbox = font.getbbox(span.text)
                 w_span = bbox[2] - bbox[0]
 
                 if span.code:
