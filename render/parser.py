@@ -288,7 +288,7 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
     # 预提取 $$...$$ 块级数学表达式，避免 markdown-it 将其当作文本处理
     processed_text, block_math = _pre_extract_block_math(text)
 
-    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "hr", "emphasis", "backticks"])
+    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "hr", "emphasis", "backticks", "link"])
     md.options["html"] = False
     tokens: list[Token] = md.parse(processed_text)
     segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider] = []
