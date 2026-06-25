@@ -71,26 +71,6 @@ class Divider:
     pass
 
 
-def _extract_text(tokens: list[Token]) -> str:
-    """从 token 序列中提取纯文本内容。
-
-    Args:
-        tokens: markdown-it-py token 列表。
-
-    Returns:
-        拼接后的纯文本字符串。
-    """
-    parts: list[str] = []
-    for t in tokens:
-        if t.type == "inline":
-            parts.append(t.content)
-        elif t.type in ("text", "code_inline"):
-            parts.append(t.content)
-        elif t.children:
-            parts.append(_extract_text(t.children))
-    return "".join(parts)
-
-
 def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
     """从 inline token 的 children 中提取 Span 列表。
 
@@ -218,7 +198,7 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
                         k += 1
                     row.append(RichCell(spans=_cell_spans(cell_tokens)))
                 k += 1
-            if in_head:
+            if in_head and not headers:
                 headers = row
             else:
                 rows.append(row)
@@ -350,9 +330,8 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
             i += 1
             continue
 
-        text_content = _extract_text([t])
-        if text_content:
-            text_buf.append(text_content)
+        if t.content:
+            text_buf.append(t.content)
         i += 1
 
     flush_buf()
