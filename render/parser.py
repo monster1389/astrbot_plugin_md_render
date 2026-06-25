@@ -91,16 +91,75 @@ def _extract_text(tokens: list[Token]) -> str:
     return "".join(parts)
 
 
-def _cell_text(tokens: list[Token]) -> str:
-    """提取表格单元格的纯文本（去除 markdown 标记）。
+def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
+    """从 inline token 的 children 中提取 Span 列表。
+
+    追踪 strong_open/close、em_open/close、s_open/close、
+    code_inline、link_open/close 状态开关，为每段 text 生成
+    携带当前格式状态的 Span。
+
+    Args:
+        tokens: inline token 的 children 列表。
+
+    Returns:
+        解析后的 Span 列表。
+    """
+    spans: list[Span] = []
+    bold = False
+    italic = False
+    strike = False
+    code = False
+    link_url = ""
+    for t in tokens:
+        if t.type == "text":
+            if t.content:
+                spans.append(Span(t.content, bold=bold, italic=italic,
+                                  strike=strike, code=code, link_url=link_url))
+        elif t.type == "strong_open":
+            bold = True
+        elif t.type == "strong_close":
+            bold = False
+        elif t.type == "em_open":
+            italic = True
+        elif t.type == "em_close":
+            italic = False
+        elif t.type == "s_open":
+            strike = True
+        elif t.type == "s_close":
+            strike = False
+        elif t.type == "code_inline":
+            spans.append(Span(t.content, bold=bold, italic=italic,
+                              strike=strike, code=True, link_url=link_url))
+        elif t.type == "link_open":
+            link_url = t.attrs.get("href", "")
+        elif t.type == "link_close":
+            link_url = ""
+        elif t.type == "softbreak":
+            spans.append(Span(" ", bold=bold, italic=italic,
+                              strike=strike, code=code, link_url=link_url))
+    return spans
+
+
+def _cell_spans(tokens: list[Token]) -> list[Span]:
+    """从单元格 token 序列提取 Span 列表。
 
     Args:
         tokens: 单元格内 token 列表。
 
     Returns:
-        去除首尾空格后的纯文本字符串。
+        解析后的 Span 列表。
     """
-    return _extract_text(tokens).strip()
+    spans: list[Span] = []
+    for t in tokens:
+        if t.type == "inline" and t.children:
+            spans.extend(_extract_spans_from_children(t.children))
+        elif t.type == "inline":
+            spans.append(Span(text=t.content))
+        elif t.type == "text":
+            spans.append(Span(text=t.content))
+        elif t.type == "softbreak":
+            spans.append(Span(text=" "))
+    return spans
 
 
 def _pre_extract_block_math(text: str) -> tuple[str, dict[int, str]]:
@@ -137,8 +196,8 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
     Returns:
         (解析后的 Table 对象, table_close 的下一个索引)。
     """
-    headers: list[str] = []
-    rows: list[list[str]] = []
+    headers: list[RichCell] = []
+    rows: list[list[RichCell]] = []
     j = start_idx + 1
     in_head = True
     while j < len(tokens) and tokens[j].type != "table_close":
@@ -148,7 +207,7 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
         elif tok.type == "tbody_open":
             in_head = False
         elif tok.type == "tr_open":
-            row: list[str] = []
+            row: list[RichCell] = []
             k = j + 1
             while k < len(tokens) and tokens[k].type != "tr_close":
                 if tokens[k].type in ("th_open", "td_open"):
@@ -157,7 +216,7 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
                     while k < len(tokens) and tokens[k].type not in ("th_close", "td_close"):
                         cell_tokens.append(tokens[k])
                         k += 1
-                    row.append(_cell_text(cell_tokens))
+                    row.append(RichCell(spans=_cell_spans(cell_tokens)))
                 k += 1
             if in_head:
                 headers = row
@@ -229,7 +288,7 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
     # 预提取 $$...$$ 块级数学表达式，避免 markdown-it 将其当作文本处理
     processed_text, block_math = _pre_extract_block_math(text)
 
-    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "hr"])
+    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "hr", "emphasis", "backticks"])
     md.options["html"] = False
     tokens: list[Token] = md.parse(processed_text)
     segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider] = []
