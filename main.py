@@ -18,7 +18,7 @@ import py7zr
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Plain, Image, File as AstrFile
+from astrbot.api.message_components import Image, File as AstrFile
 from astrbot.api.star import Context, Star, StarTools, register
 
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
@@ -138,8 +138,8 @@ class MdRenderPlugin(Star):
         built = build_chain(segments, cfg, data_dir)
 
         # 汇总日志（0 则静默）
-        image_count = sum(1 for item in built if item["type"] == "Image")
-        file_count = sum(1 for item in built if item["type"] == "File")
+        image_count = sum(1 for item in built if isinstance(item, Image))
+        file_count = sum(1 for item in built if isinstance(item, AstrFile))
         total = image_count + file_count
         if total > 0:
             parts: list[str] = []
@@ -151,29 +151,7 @@ class MdRenderPlugin(Star):
                 parts.append(f"表达式({cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
-        result.chain = self._to_comp_list(built)
-
-    def _to_comp_list(self, seg_group: list[dict[str, Any]]) -> list:
-        """将内部 chain 结构转换为 AstrBot Component 列表。
-
-        Args:
-            seg_group: build_chain 输出的消息段。
-
-        Returns:
-            AstrBot Component 对象列表。
-        """
-        comps: list[Any] = []
-        for item in seg_group:
-            if item["type"] == "Plain":
-                comps.append(Plain(item["text"]))
-            elif item["type"] == "Image":
-                comps.append(Image.fromFileSystem(item["path"]))
-            elif item["type"] == "File":
-                comps.append(AstrFile(
-                    name=os.path.basename(item["path"]),
-                    file=item["path"],
-                ))
-        return comps
+        result.chain = built
 
     async def terminate(self):
         """插件销毁。"""

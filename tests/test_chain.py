@@ -1,6 +1,8 @@
 """消息链组装与分段测试。"""
 from unittest.mock import patch
 
+from astrbot.api.message_components import Plain, Image, File as AstrFile
+
 from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, RichCell, Segment, Span, Table
 from render.utils import RenderConfig
 
@@ -29,8 +31,8 @@ class TestBuildChain:
         cfg = _make_cfg()
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "Plain"
-        assert result[0]["text"] == "Hello"
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "Hello"
 
     def test_code_noop_keeps_original(self):
         """代码块不处理：还原为 markdown 原文。"""
@@ -40,8 +42,8 @@ class TestBuildChain:
         cfg = _make_cfg(code_mode="不处理")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "Plain"
-        assert "```py" in result[0]["text"]
+        assert isinstance(result[0], Plain)
+        assert "```py" in result[0].text
 
     @patch("render.chain.render_code")
     def test_code_render_image(self, mock_render):
@@ -52,8 +54,8 @@ class TestBuildChain:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
         result = build_chain(segments, cfg, "/tmp")
-        assert len(result) == 1  # Image only, no File
-        assert result[0]["type"] == "Image"
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
 
     @patch("render.chain.render_code")
     def test_code_render_with_md(self, mock_render):
@@ -64,8 +66,8 @@ class TestBuildChain:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且md文件")
         result = build_chain(segments, cfg, "/tmp")
-        assert result[0]["type"] == "Image"
-        assert result[1]["type"] == "File"
+        assert isinstance(result[0], Image)
+        assert isinstance(result[1], AstrFile)
 
     @patch("render.chain.render_code")
     def test_code_keep_original(self, mock_render):
@@ -76,10 +78,10 @@ class TestBuildChain:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = build_chain(segments, cfg, "/tmp")
-        assert len(result) == 2  # Plain + Image only, no File
-        assert result[0]["type"] == "Plain"
-        assert "x=1" in result[0]["text"]
-        assert result[1]["type"] == "Image"
+        assert len(result) == 2
+        assert isinstance(result[0], Plain)
+        assert "x=1" in result[0].text
+        assert isinstance(result[1], Image)
 
     @patch("render.chain.render_table")
     def test_table_render_image(self, mock_render):
@@ -90,17 +92,17 @@ class TestBuildChain:
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像")
         result = build_chain(segments, cfg, "/tmp")
-        assert result[0]["type"] == "Image"
+        assert isinstance(result[0], Image)
 
     def test_divider_split(self):
-        """分隔线切分模式：产生 divider 标记。"""
+        """分隔线切分模式：不产生 Component（保留给外部 splitter）。"""
         from render.chain import build_chain
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
         cfg = _make_cfg(divider_mode="切分")
         result = build_chain(segments, cfg, "/tmp")
-        types = [c["type"] for c in result]
-        assert "divider" in types
+        assert len(result) == 2
+        assert all(isinstance(c, Plain) for c in result)
 
     @patch("render.chain.render_inline_expr")
     def test_inline_expr_render_image(self, mock_render):
@@ -112,7 +114,7 @@ class TestBuildChain:
         cfg = _make_cfg(expr_mode="渲染图像")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "Image"
+        assert isinstance(result[0], Image)
 
     @patch("render.chain.render_block_expr")
     def test_block_expr_noop(self, mock_render):
@@ -123,10 +125,9 @@ class TestBuildChain:
         cfg = _make_cfg(expr_mode="不处理")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "Plain"
-        assert "$$" in result[0]["text"]
+        assert isinstance(result[0], Plain)
+        assert "$$" in result[0].text
         mock_render.assert_not_called()
-
 
     @patch("render.chain.render_code")
     def test_code_render_failure_fallback(self, mock_render):
@@ -143,10 +144,10 @@ class TestBuildChain:
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
         result = build_chain(segments, cfg, "/tmp")
-        assert result[0]["type"] == "Plain"
-        assert "```py" in result[0]["text"]
-        assert result[1]["type"] == "Plain"
-        assert result[1]["text"] == "后续文本"
+        assert isinstance(result[0], Plain)
+        assert "```py" in result[0].text
+        assert isinstance(result[1], Plain)
+        assert result[1].text == "后续文本"
 
     @patch("render.chain.render_code")
     def test_code_render_failure_keep_original_mode(self, mock_render):
@@ -164,7 +165,7 @@ class TestBuildChain:
         segments = [CodeBlock(lang="py", code="x=1")]
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "Plain"
+        assert isinstance(result[0], Plain)
 
     @patch("render.chain.render_code")
     def test_code_md_only(self, mock_render):
@@ -175,7 +176,7 @@ class TestBuildChain:
         cfg = _make_cfg(code_mode="仅md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "File"
+        assert isinstance(result[0], AstrFile)
         mock_render.assert_not_called()
 
     @patch("render.chain.render_table")
@@ -187,7 +188,7 @@ class TestBuildChain:
         cfg = _make_cfg(table_mode="仅md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
-        assert result[0]["type"] == "File"
+        assert isinstance(result[0], AstrFile)
         mock_render.assert_not_called()
 
     @patch("render.chain.render_table")
@@ -200,5 +201,5 @@ class TestBuildChain:
         cfg = _make_cfg(table_mode="渲染且md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 2
-        assert result[0]["type"] == "Image"
-        assert result[1]["type"] == "File"
+        assert isinstance(result[0], Image)
+        assert isinstance(result[1], AstrFile)

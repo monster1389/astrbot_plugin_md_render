@@ -21,3 +21,26 @@ if "astrbot" not in sys.modules:
     _astrbot.api = _astrbot_api
     sys.modules["astrbot"] = _astrbot
     sys.modules["astrbot.api"] = _astrbot_api
+
+# Mock astrbot.api.message_components — 提供 Plain/Image/File 桩类
+class MockPlain:
+    def __init__(self, text: str = ""):
+        self.text = text
+
+class MockImage:
+    @staticmethod
+    def fromFileSystem(path: str):
+        img = MockImage()
+        img.file = path
+        return img
+
+class MockFile:
+    def __init__(self, name: str = "", file: str = ""):
+        self.name = name
+        self.file = file
+
+_mock_msg_comp = types.ModuleType("astrbot.api.message_components")
+_mock_msg_comp.Plain = MockPlain
+_mock_msg_comp.Image = MockImage
+_mock_msg_comp.File = MockFile
+sys.modules["astrbot.api.message_components"] = _mock_msg_comp

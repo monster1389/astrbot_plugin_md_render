@@ -5,7 +5,10 @@ build_chain: 根据配置模式将解析结果+渲染产物组装为统一的消
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
+
+from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.code import render_code
 from render.expr import render_block_expr, render_inline_expr
@@ -28,11 +31,8 @@ def build_chain(
     segments: list[Any],
     cfg: RenderConfig,
     data_dir: str,
-) -> list[dict[str, Any]]:
-    """将解析后的 Segment 列表转换为统一的消息链结构。
-
-    每个元素为 dict，type 为 Plain/Image/File/divider。
-    渲染产物路径写入对应字段。
+) -> list[Plain | Image | AstrFile]:
+    """将解析后的 Segment 列表转换为 AstrBot Component 列表。
 
     Args:
         segments: parser.parse() 输出的 Segment 列表。
@@ -40,180 +40,110 @@ def build_chain(
         data_dir: 插件数据目录路径，用于存放渲染产物。
 
     Returns:
-        消息链结构列表。
+        AstrBot Component 对象列表。
     """
-    chain: list[dict[str, Any]] = []
+    chain: list[Plain | Image | AstrFile] = []
 
     for seg in segments:
         if isinstance(seg, CodeBlock):
-            _append_code(chain, seg, cfg, data_dir)
+            _dispatch(
+                chain,
+                raw_text=f"```{seg.lang}\n{seg.code}\n```",
+                mode=cfg.code_mode,
+                data_dir=data_dir,
+                prefix="code",
+                render_fn=lambda: render_code(seg, cfg, data_dir),
+                has_file_mode=True,
+            )
         elif isinstance(seg, Table):
-            _append_table(chain, seg, cfg, data_dir)
+            _dispatch(
+                chain,
+                raw_text=_table_to_text(seg),
+                mode=cfg.table_mode,
+                data_dir=data_dir,
+                prefix="table",
+                render_fn=lambda: render_table(seg, cfg, data_dir),
+                has_file_mode=True,
+            )
         elif isinstance(seg, InlineExpr):
-            _append_inline_expr(chain, seg, cfg, data_dir)
+            _dispatch(
+                chain,
+                raw_text=f"${seg.expr}$",
+                mode=cfg.expr_mode,
+                data_dir=data_dir,
+                prefix="expr",
+                render_fn=lambda: render_inline_expr(seg, cfg, data_dir),
+                has_file_mode=False,
+            )
         elif isinstance(seg, BlockExpr):
-            _append_block_expr(chain, seg, cfg, data_dir)
+            _dispatch(
+                chain,
+                raw_text=f"$$\n{seg.expr}\n$$",
+                mode=cfg.expr_mode,
+                data_dir=data_dir,
+                prefix="expr",
+                render_fn=lambda: render_block_expr(seg, cfg, data_dir),
+                has_file_mode=False,
+            )
         elif isinstance(seg, Divider):
             if cfg.divider_mode == "切分":
-                chain.append({"type": "divider"})
+                pass  # splitter plugin integration
         elif isinstance(seg, Segment):
-            chain.append({"type": "Plain", "text": seg.text})
+            chain.append(Plain(seg.text))
 
     return chain
 
 
-def _append_code(
-    chain: list[dict[str, Any]],
-    seg: CodeBlock,
-    cfg: RenderConfig,
+def _dispatch(
+    chain: list,
+    raw_text: str,
+    mode: str,
     data_dir: str,
+    prefix: str,
+    render_fn,
+    has_file_mode: bool,
 ) -> None:
-    """按代码块处理模式将渲染结果追加到 chain。
+    """统一分发：按 mode 决定渲染/文件/原文策略。
 
     Args:
         chain: 目标消息链列表。
-        seg: CodeBlock 实例。
-        cfg: 渲染配置。
+        raw_text: 原始 markdown 文本（用于不处理/保留原文/回退）。
+        mode: 配置渲染模式。
         data_dir: 插件数据目录路径。
+        prefix: 产物文件名前缀（code/table/expr）。
+        render_fn: 无参渲染函数，返回 png_path 或 (png_path, md_path)。
+        has_file_mode: 是否支持"仅md文件"/"渲染且md文件"模式。
     """
-    mode = cfg.code_mode
     if mode == "不处理":
-        chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
+        chain.append(Plain(raw_text))
         return
 
-    if mode == "仅md文件":
-        md_text = f"```{seg.lang}\n{seg.code}\n```"
-        md_path = build_temp_path(data_dir, "code", ".md")
+    if has_file_mode and mode == "仅md文件":
+        md_path = build_temp_path(data_dir, prefix, ".md")
         with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_text)
-        chain.append({"type": "File", "path": md_path})
+            f.write(raw_text)
+        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
         return
 
     try:
-        png_path, md_path = render_code(seg, cfg, data_dir)
+        result = render_fn()
     except Exception:
-        logger.warning(
-            "代码块渲染失败，已回退为原文: %s", seg.lang,
-            exc_info=True,
-        )
-        chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
+        logger.warning("%s 渲染失败，已回退为原文", prefix, exc_info=True)
+        chain.append(Plain(raw_text))
         return
 
-    if mode == "渲染且保留原文":
-        chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
-    chain.append({"type": "Image", "path": png_path})
+    png_path, md_path = result if isinstance(result, tuple) else (result, None)
+
+    if "保留原文" in mode:
+        chain.append(Plain(raw_text))
+    chain.append(Image.fromFileSystem(png_path))
+
     if mode == "渲染且md文件":
-        chain.append({"type": "File", "path": md_path})
-
-
-def _append_table(
-    chain: list[dict[str, Any]],
-    seg: Table,
-    cfg: RenderConfig,
-    data_dir: str,
-) -> None:
-    """按表格处理模式将渲染结果追加到 chain。
-
-    Args:
-        chain: 目标消息链列表。
-        seg: Table 实例。
-        cfg: 渲染配置。
-        data_dir: 插件数据目录路径。
-    """
-    md_text = _table_to_text(seg)
-
-    if cfg.table_mode == "不处理":
-        chain.append({"type": "Plain", "text": md_text})
-        return
-
-    if cfg.table_mode == "仅md文件":
-        md_path = build_temp_path(data_dir, "table", ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_text)
-        chain.append({"type": "File", "path": md_path})
-        return
-
-    try:
-        png_path = render_table(seg, cfg, data_dir)
-    except Exception:
-        logger.warning("表格渲染失败，已回退为原文", exc_info=True)
-        chain.append({"type": "Plain", "text": md_text})
-        return
-
-    if cfg.table_mode == "渲染且保留原文":
-        chain.append({"type": "Plain", "text": md_text})
-    chain.append({"type": "Image", "path": png_path})
-    if cfg.table_mode == "渲染且md文件":
-        md_path = build_temp_path(data_dir, "table", ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_text)
-        chain.append({"type": "File", "path": md_path})
-
-
-def _append_inline_expr(
-    chain: list[dict[str, Any]],
-    seg: InlineExpr,
-    cfg: RenderConfig,
-    data_dir: str,
-) -> None:
-    """按表达式处理模式将行内表达式渲染结果追加到 chain。
-
-    Args:
-        chain: 目标消息链列表。
-        seg: InlineExpr 实例。
-        cfg: 渲染配置。
-        data_dir: 插件数据目录路径。
-    """
-    if cfg.expr_mode == "不处理":
-        chain.append({"type": "Plain", "text": f"${seg.expr}$"})
-        return
-
-    try:
-        png_path = render_inline_expr(seg, cfg, data_dir)
-    except Exception:
-        logger.warning(
-            "行内表达式渲染失败，已回退为原文: %s", seg.expr[:30],
-            exc_info=True,
-        )
-        chain.append({"type": "Plain", "text": f"${seg.expr}$"})
-        return
-
-    if cfg.expr_mode == "渲染且保留原文":
-        chain.append({"type": "Plain", "text": f"${seg.expr}$"})
-    chain.append({"type": "Image", "path": png_path})
-
-
-def _append_block_expr(
-    chain: list[dict[str, Any]],
-    seg: BlockExpr,
-    cfg: RenderConfig,
-    data_dir: str,
-) -> None:
-    """按表达式处理模式将块级表达式渲染结果追加到 chain。
-
-    Args:
-        chain: 目标消息链列表。
-        seg: BlockExpr 实例。
-        cfg: 渲染配置。
-        data_dir: 插件数据目录路径。
-    """
-    if cfg.expr_mode == "不处理":
-        chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
-        return
-
-    try:
-        png_path = render_block_expr(seg, cfg, data_dir)
-    except Exception:
-        logger.warning(
-            "块级表达式渲染失败，已回退为原文: %s", seg.expr[:30],
-            exc_info=True,
-        )
-        chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
-        return
-
-    if cfg.expr_mode == "渲染且保留原文":
-        chain.append({"type": "Plain", "text": f"$$\n{seg.expr}\n$$"})
-    chain.append({"type": "Image", "path": png_path})
+        if md_path is None:
+            md_path = build_temp_path(data_dir, prefix, ".md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(raw_text)
+        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
 
 
 def _table_to_text(table: Table) -> str:
