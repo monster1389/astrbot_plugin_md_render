@@ -4,6 +4,7 @@
 若缺失，按配置的映射表替换为替代字符；无映射则保留原字符。
 提供 fallback_text（纯文本）和 fallback_spans（富文本 Span）两个入口。
 """
+from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any

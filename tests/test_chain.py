@@ -1,7 +1,7 @@
 """消息链组装与分段测试。"""
 from unittest.mock import patch
 
-from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment, Table
+from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, RichCell, Segment, Span, Table
 from render.utils import RenderConfig
 
 
@@ -87,7 +87,7 @@ class TestBuildChain:
         from render.chain import build_chain
 
         mock_render.return_value = "/tmp/table_001.png"
-        segments = [Table(headers=["A"], rows=[["1"]])]
+        segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像")
         result = build_chain(segments, cfg, "/tmp")
         assert result[0]["type"] == "Image"
@@ -183,7 +183,7 @@ class TestBuildChain:
         """仅md文件模式：只有 File 没有 Image，不调渲染。"""
         from render.chain import build_chain
 
-        segments = [Table(headers=["A"], rows=[["1"]])]
+        segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="仅md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
@@ -196,7 +196,7 @@ class TestBuildChain:
         from render.chain import build_chain
 
         mock_render.return_value = "/tmp/table_001.png"
-        segments = [Table(headers=["A"], rows=[["1"]])]
+        segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染且md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 2

@@ -2,14 +2,13 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from render.parser import Table
+from render.parser import RichCell, Span, Table
 from render.utils import RenderConfig
 
 _FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 def _make_cfg(**overrides):
-    """构造测试用 RenderConfig。"""
     defaults = {
         "code_mode": "渲染且txt",
         "table_mode": "渲染图像",
@@ -23,15 +22,24 @@ def _make_cfg(**overrides):
     return RenderConfig(**(defaults | overrides))
 
 
-class TestRenderTable:
-    @patch("render.table.plt")
-    @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_renders_simple_table(self, mock_font, mock_plt):
-        """简单表格渲染返回 png 路径。"""
-        mock_fig = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, MagicMock())
+def _cell(text: str) -> RichCell:
+    return RichCell(spans=[Span(text=text)])
 
-        tbl = Table(headers=["姓名", "年龄"], rows=[["张三", "20"], ["李四", "25"]])
+
+class TestRenderTable:
+    @patch("render.table.ImageDraw")
+    @patch("render.table.Image")
+    @patch("render.table.find_font_path", return_value=_FONT_PATH)
+    def test_renders_simple_table(self, mock_font, mock_img_cls, mock_draw_cls):
+        """简单表格渲染返回 png 路径。"""
+        mock_img = MagicMock()
+        mock_img.resize.return_value = mock_img
+        mock_img_cls.new.return_value = mock_img
+
+        tbl = Table(
+            headers=[_cell("姓名"), _cell("年龄")],
+            rows=[[_cell("张三"), _cell("20")], [_cell("李四"), _cell("25")]],
+        )
         cfg = _make_cfg()
 
         from render.table import render_table
@@ -39,22 +47,116 @@ class TestRenderTable:
 
         assert png_path.endswith(".png")
         assert os.path.basename(png_path).startswith("table_")
-        mock_plt.savefig.assert_called_once()
-        mock_plt.close.assert_called_once()
+        mock_img.save.assert_called_once()
 
-    @patch("render.table.plt")
+    @patch("render.table.ImageDraw")
+    @patch("render.table.Image")
     @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_empty_table(self, mock_font, mock_plt):
+    def test_empty_table(self, mock_font, mock_img_cls, mock_draw_cls):
         """空表格也能渲染。"""
-        mock_fig = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, MagicMock())
+        mock_img = MagicMock()
+        mock_img.resize.return_value = mock_img
+        mock_img_cls.new.return_value = mock_img
 
-        tbl = Table(headers=["A"], rows=[])
+        tbl = Table(headers=[_cell("A")], rows=[])
         cfg = _make_cfg()
 
         from render.table import render_table
         png_path = render_table(tbl, cfg, data_dir="/tmp")
 
         assert os.path.basename(png_path).startswith("table_")
-        mock_plt.savefig.assert_called_once()
-        mock_plt.close.assert_called_once()
+        mock_img.save.assert_called_once()
+
+    @patch("render.table.ImageDraw")
+    @patch("render.table.Image")
+    @patch("render.table.find_font_path", return_value=_FONT_PATH)
+    def test_rich_cell_with_bold_and_italic(self, mock_font, mock_img_cls, mock_draw_cls):
+        """包含加粗和斜体 Span 的富文本单元格正确渲染。"""
+        mock_img = MagicMock()
+        mock_img.resize.return_value = mock_img
+        mock_img_cls.new.return_value = mock_img
+
+        tbl = Table(
+            headers=[_cell("格式"), _cell("内容")],
+            rows=[
+                [
+                    RichCell(spans=[Span(text="加粗", bold=True)]),
+                    RichCell(spans=[Span(text="普通"), Span(text="斜体", italic=True)]),
+                ]
+            ],
+        )
+        cfg = _make_cfg()
+
+        from render.table import render_table
+        png_path = render_table(tbl, cfg, data_dir="/tmp")
+
+        assert png_path.endswith(".png")
+        mock_img.save.assert_called_once()
+
+    @patch("render.table.ImageDraw")
+    @patch("render.table.Image")
+    @patch("render.table.find_font_path", return_value=_FONT_PATH)
+    def test_all_span_formats(self, mock_font, mock_img_cls, mock_draw_cls):
+        """全部 5 种格式 Span 均能渲染。"""
+        mock_img = MagicMock()
+        mock_img.resize.return_value = mock_img
+        mock_img_cls.new.return_value = mock_img
+
+        tbl = Table(
+            headers=[_cell("类型")],
+            rows=[
+                [RichCell(spans=[
+                    Span(text="粗", bold=True),
+                    Span(text="斜", italic=True),
+                    Span(text="删", strike=True),
+                    Span(text="码", code=True),
+                    Span(text="链", link_url="https://x.com"),
+                ])],
+            ],
+        )
+        cfg = _make_cfg()
+
+        from render.table import render_table
+        png_path = render_table(tbl, cfg, data_dir="/tmp")
+
+        assert png_path.endswith(".png")
+        mock_img.save.assert_called_once()
+
+
+class TestTableToText:
+    """_table_to_text 从 RichCell 重建 markdown。"""
+
+    def test_plain_cell(self):
+        from render.chain import _table_to_text
+        t = Table(headers=[_cell("A")], rows=[[_cell("1")]])
+        result = _table_to_text(t)
+        assert "| A |" in result
+        assert "| 1 |" in result
+
+    def test_bold_cell(self):
+        from render.chain import _table_to_text
+        t = Table(
+            headers=[_cell("H")],
+            rows=[[RichCell(spans=[Span(text="bold", bold=True)])]],
+        )
+        result = _table_to_text(t)
+        assert "| **bold** |" in result
+
+    def test_mixed_cell(self):
+        from render.chain import _table_to_text
+        t = Table(
+            headers=[_cell("H")],
+            rows=[[RichCell(spans=[
+                Span(text="b", bold=True),
+                Span(text="i", italic=True),
+                Span(text="s", strike=True),
+                Span(text="c", code=True),
+                Span(text="l", link_url="https://a.b"),
+            ])]],
+        )
+        result = _table_to_text(t)
+        assert "**b**" in result
+        assert "*i*" in result
+        assert "~~s~~" in result
+        assert "`c`" in result
+        assert "[l](https://a.b)" in result

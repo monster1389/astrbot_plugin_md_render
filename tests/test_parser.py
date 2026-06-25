@@ -1,5 +1,5 @@
 """解析器测试：从 Plain 文本提取代码块/表格/表达式/分隔线。"""
-from render.parser import parse, Segment, CodeBlock, Table, InlineExpr, BlockExpr, Divider
+from render.parser import parse, Segment, CodeBlock, RichCell, Span, Table, InlineExpr, BlockExpr, Divider
 
 
 class TestCodeBlock:
@@ -44,8 +44,8 @@ class TestTable:
         assert len(segments) == 1
         seg = segments[0]
         assert isinstance(seg, Table)
-        assert seg.headers == ["A", "B"]
-        assert seg.rows == [["1", "2"]]
+        assert seg.headers == [RichCell(spans=[Span(text="A")]), RichCell(spans=[Span(text="B")])]
+        assert seg.rows == [[RichCell(spans=[Span(text="1")]), RichCell(spans=[Span(text="2")])]]
 
     def test_table_with_padding(self):
         """含空格填充的表格。"""
@@ -54,8 +54,8 @@ class TestTable:
         assert len(segments) == 1
         seg = segments[0]
         assert isinstance(seg, Table)
-        assert seg.headers == ["姓名", "年龄"]
-        assert seg.rows == [["张三", "20"]]
+        assert seg.headers == [RichCell(spans=[Span(text="姓名")]), RichCell(spans=[Span(text="年龄")])]
+        assert seg.rows == [[RichCell(spans=[Span(text="张三")]), RichCell(spans=[Span(text="20")])]]
 
 
 class TestExpr:
