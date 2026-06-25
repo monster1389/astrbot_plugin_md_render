@@ -264,7 +264,7 @@ def extract_inline_content(
             continue
 
         # 在普通文本中拆分 $...$ 行内表达式
-        dollar_parts = part.split("$")
+        dollar_parts = re.split(r"(?<!\\)\$", part)
         for i, p in enumerate(dollar_parts):
             if i % 2 == 1:
                 if p.strip():

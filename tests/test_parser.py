@@ -65,6 +65,16 @@ class TestExpr:
         segments = parse(text)
         assert any(isinstance(s, InlineExpr) and s.expr == "E=mc^2" for s in segments)
 
+    def test_escaped_dollar(self):
+        r"""转义的 \$ 不作为表达式分隔符。"""
+        text = r"价格 \$100 和 $E=mc^2$"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert len(inline_exprs) == 1
+        assert inline_exprs[0].expr == "E=mc^2"
+        plain_text = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "\\$100" in plain_text or "$100" in plain_text
+
     def test_block_expr(self):
         """块级表达式 $$...$$。"""
         text = "$$\n\\int_0^\\infty e^{-x} dx\n$$"
