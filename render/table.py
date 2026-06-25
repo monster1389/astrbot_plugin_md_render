@@ -26,11 +26,12 @@ _RGB_CODE_BG = (50, 50, 70)
 _RGB_CODE = (150, 220, 150)
 _RGB_LINK = (120, 180, 255)
 
-_FONT_SIZE = 14
-_PAD_X = 10
-_PAD_Y = 7
+_FONT_SIZE = 29  # 14pt @ 150 DPI 等效 (150/72*14≈29)
+_PAD_X = 21      # 10px @ 150 DPI 等效
+_PAD_Y = 15      # 7px @ 150 DPI 等效
 _DPI = 2
-_STRIKE_Y_OFFSET = -2  # 删除线相对基线偏移（px，按 DPI 缩放后）
+_MARGIN = 20     # 10px 外边距 @ 2x 内部分辨率
+_STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩放后）
 
 
 def render_table(
@@ -93,17 +94,19 @@ def render_table(
     total_w = sum(col_widths)
     total_h = sum(row_heights)
 
-    img = Image.new("RGBA", (total_w + 1, total_h + 1), _RGB_BG)
+    canvas_w = total_w + _MARGIN * 2 + 1
+    canvas_h = total_h + _MARGIN * 2 + 1
+    img = Image.new("RGBA", (canvas_w, canvas_h), _RGB_BG)
     draw = ImageDraw.Draw(img)
 
-    y = 0
+    y = _MARGIN
     for r in range(n_rows):
         rh = row_heights[r]
-        draw.line([(0, y), (total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
+        draw.line([(_MARGIN, y), (_MARGIN + total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
 
         for c in range(min(n_cols, len(all_rows[r]))):
             cell = all_rows[r][c]
-            x = sum(col_widths[:c])
+            x = sum(col_widths[:c]) + _MARGIN
             w = col_widths[c]
 
             draw.line([(x, y), (x, y + rh)], fill=_RGB_GRID, width=1 * _DPI)
@@ -151,10 +154,10 @@ def render_table(
 
         y += rh
 
-    draw.line([(0, y), (total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
-    draw.line([(total_w, 0), (total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
+    draw.line([(_MARGIN, y), (_MARGIN + total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
+    draw.line([(_MARGIN + total_w, _MARGIN), (_MARGIN + total_w, y)], fill=_RGB_GRID, width=1 * _DPI)
 
-    img = img.resize((total_w // _DPI, total_h // _DPI), Image.LANCZOS)
+    img = img.resize((canvas_w // _DPI, canvas_h // _DPI), Image.LANCZOS)
 
     png_path = build_temp_path(data_dir, "table", ".png")
     img.save(png_path, "PNG")
