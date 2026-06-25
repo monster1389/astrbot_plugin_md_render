@@ -50,7 +50,7 @@ class TestLoadConfig:
     def test_defaults(self):
         raw = {}
         cfg = load_config(raw)
-        assert cfg.code_mode == "渲染且txt"
+        assert cfg.code_mode == "渲染且md文件"
         assert cfg.table_mode == "渲染图像"
         assert cfg.expr_mode == "渲染图像"
         assert cfg.divider_mode == "不处理"
