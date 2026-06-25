@@ -48,7 +48,7 @@ class TestBuildChain:
         """代码块渲染图像模式：只有 Image 没有 File 也没有原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.txt")
+        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
         result = build_chain(segments, cfg, "/tmp")
@@ -56,13 +56,13 @@ class TestBuildChain:
         assert result[0]["type"] == "Image"
 
     @patch("render.chain.render_code")
-    def test_code_render_with_txt(self, mock_render):
-        """渲染且txt：Image + File。"""
+    def test_code_render_with_md(self, mock_render):
+        """渲染且md文件：Image + File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.txt")
+        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
         segments = [CodeBlock(lang="py", code="x=1")]
-        cfg = _make_cfg(code_mode="渲染且txt")
+        cfg = _make_cfg(code_mode="渲染且md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert result[0]["type"] == "Image"
         assert result[1]["type"] == "File"
@@ -72,7 +72,7 @@ class TestBuildChain:
         """渲染且保留原文：原文 Plain + Image，无 File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.txt")
+        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = build_chain(segments, cfg, "/tmp")
@@ -167,12 +167,12 @@ class TestBuildChain:
         assert result[0]["type"] == "Plain"
 
     @patch("render.chain.render_code")
-    def test_code_txt_only(self, mock_render):
-        """仅txt模式：只有 File 没有 Image，不调渲染。"""
+    def test_code_md_only(self, mock_render):
+        """仅md文件模式：只有 File 没有 Image，不调渲染。"""
         from render.chain import build_chain
 
         segments = [CodeBlock(lang="py", code="x=1")]
-        cfg = _make_cfg(code_mode="仅txt")
+        cfg = _make_cfg(code_mode="仅md文件")
         result = build_chain(segments, cfg, "/tmp")
         assert len(result) == 1
         assert result[0]["type"] == "File"

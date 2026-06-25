@@ -80,11 +80,11 @@ def render_code(
     with open(png_path, "wb") as f:
         f.write(png_data)
 
-    # 写入 TXT
-    txt_path = build_temp_path(data_dir, "code", ".txt")
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(code)
+    # 写入 MD
+    md_path = build_temp_path(data_dir, "code", ".md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(f"```{lang}\n{code}\n```")
 
-    return png_path, txt_path
+    return png_path, md_path
 
 

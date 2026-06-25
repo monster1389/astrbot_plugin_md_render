@@ -64,7 +64,7 @@ LLM/Star 生成消息
     ▼
 OnDecoratingResultEvent (priority=1000)  ← 本插件
     │  解析 Plain 中的代码块/表格
-    │  渲染为 Image(png) + File(txt)
+    │  渲染为 Image(png) + File(.md)
     │  替换到 result.chain
     │  自然分段：以 Plain 为锚点，紧跟的非 Plain 归入同段
     │  最后一段留在 chain 给 RespondStage
@@ -78,16 +78,21 @@ RespondStage 发送最终 chain
 `render/utils.py` — `RenderConfig` dataclass + 四个工具函数：
 - `load_config(raw)` — 从 AstrBot 配置字典构造配置对象
 - `parse_color(value)` — 提取纯 hex 颜色
-- `find_font_path()` — 发现可用中文字体
+- `find_font_path(data_dir)` — 发现可用中文字体，优先使用捆绑的更纱等宽黑体
 - `build_temp_path(data_dir, prefix, ext)` — 在 temp/ 下建带时间戳的文件路径
 
-### 渲染类型
+### 模块
 
-| 输入 | 输出 | 工具 |
-|------|------|------|
-| ` ```lang ... ``` ` | Image(png) + 可选 File(.txt) | pygments → pillow |
-| `\| 表头 \| ...` | Image(png) | matplotlib.table |
-| — | 临时文件清理 | `render/cleaner.py` — 周期性扫描 temp/，按配置存活时长删过期文件 |
+| 模块 | 职责 |
+|------|------|
+| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider |
+| `render/code.py` | pygments → pillow 渲染代码块为 PNG，同时写 .md 围栏文件 |
+| `render/table.py` | matplotlib.table 渲染表格为 PNG |
+| `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级）为 PNG |
+| `render/glyph.py` | 字形回退：检测字符是否在字体中，按映射表替换缺失字形 |
+| `render/chain.py` | 按配置模式将解析结果组装为消息链，路由到各渲染模块 |
+| `render/cleaner.py` | 周期性扫描 temp/，按配置存活时长删过期临时文件 |
+| `render/utils.py` | `RenderConfig` dataclass + 配置加载/颜色解析/字体发现/临时路径工具 |
 
 ### 关键 API
 
@@ -95,16 +100,20 @@ RespondStage 发送最终 chain
 - `event.get_result().chain` — 获取/修改消息链
 - `@filter.on_decorating_result(priority=1000)` — 注册装饰结果事件
 
-### 依赖（已在环境内，零新增）
+### 依赖
 
-`pygments`, `pillow`, `matplotlib`, `markdown-it-py`
+`pygments`, `pillow`, `matplotlib`, `markdown-it-py`, `pillowlatex`
 
 ### 配置
 
 通过 AstrBot 内置配置系统，`_conf_schema.json` 提供下拉菜单：
-- 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且txt
-- 表格：不处理 / 渲染图像 / 渲染且保留原文
-- 临时文件存活时间（分钟）：0=即时删除，-1=永久保留
+- 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件
+- 表格：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件
+- 表达式：不处理 / 渲染图像 / 渲染且保留原文
+- 分隔线：不处理 / 切分
+- 字体颜色、背景颜色：多种预设
+- 字形映射：JSON 映射表，缺字时替换为相似字符
+- 临时文件存活（分钟）：0=即时删除，-1=永久保留
 
 ### 设计文档
 

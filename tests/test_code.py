@@ -28,42 +28,44 @@ class TestRenderCode:
         """Python 代码块渲染返回 png 和 txt 文件路径。"""
         cb = CodeBlock(lang="python", code="def f(): pass")
         cfg = _make_cfg()
-        png_path, txt_path = render_code(cb, cfg, data_dir="/tmp")
+        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
 
         assert png_path.endswith(".png")
-        assert txt_path.endswith(".txt")
+        assert md_path.endswith(".md")
         assert os.path.basename(png_path).startswith("code_")
-        assert os.path.basename(txt_path).startswith("code_")
+        assert os.path.basename(md_path).startswith("code_")
 
-        # txt 文件包含原始代码
-        with open(txt_path, "r") as f:
-            assert "def f(): pass" in f.read()
+        # md 文件包含 fenced code block
+        with open(md_path, "r") as f:
+            content = f.read()
+            assert "```python" in content
+            assert "def f(): pass" in content
 
         # png 文件存在且非空
         assert os.path.getsize(png_path) > 0
 
         # 清理
         os.remove(png_path)
-        os.remove(txt_path)
+        os.remove(md_path)
 
     @patch("render.code._find_mono_font_path", return_value="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
     def test_code_without_lang(self, mock_load):
         """无语言标注的代码块仍可渲染。"""
         cb = CodeBlock(lang="", code="plain text")
         cfg = _make_cfg()
-        png_path, txt_path = render_code(cb, cfg, data_dir="/tmp")
+        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
 
         assert os.path.getsize(png_path) > 0
         os.remove(png_path)
-        os.remove(txt_path)
+        os.remove(md_path)
 
     @patch("render.code._find_mono_font_path", return_value="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
     def test_empty_code(self, mock_load):
         """空代码块也能渲染。"""
         cb = CodeBlock(lang="python", code="")
         cfg = _make_cfg()
-        png_path, txt_path = render_code(cb, cfg, data_dir="/tmp")
+        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
 
         assert os.path.getsize(png_path) > 0
         os.remove(png_path)
-        os.remove(txt_path)
+        os.remove(md_path)

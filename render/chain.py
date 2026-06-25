@@ -80,16 +80,16 @@ def _append_code(
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
         return
 
-    if mode == "仅txt":
+    if mode == "仅md文件":
         md_text = f"```{seg.lang}\n{seg.code}\n```"
-        txt_path = build_temp_path(data_dir, "code", ".txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
+        md_path = build_temp_path(data_dir, "code", ".md")
+        with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_text)
-        chain.append({"type": "File", "path": txt_path})
+        chain.append({"type": "File", "path": md_path})
         return
 
     try:
-        png_path, txt_path = render_code(seg, cfg, data_dir)
+        png_path, md_path = render_code(seg, cfg, data_dir)
     except Exception:
         logger.warning(
             "代码块渲染失败，已回退为原文: %s", seg.lang,
@@ -101,8 +101,8 @@ def _append_code(
     if mode == "渲染且保留原文":
         chain.append({"type": "Plain", "text": f"```{seg.lang}\n{seg.code}\n```"})
     chain.append({"type": "Image", "path": png_path})
-    if mode == "渲染且txt":
-        chain.append({"type": "File", "path": txt_path})
+    if mode == "渲染且md文件":
+        chain.append({"type": "File", "path": md_path})
 
 
 def _append_table(

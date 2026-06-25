@@ -2,8 +2,8 @@
   "代码块": {
     "type": "string",
     "description": "代码块处理",
-    "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且txt", "仅txt"],
-    "default": "渲染且txt"
+    "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
+    "default": "渲染且md文件"
   },
   "表格": {
     "type": "string",
