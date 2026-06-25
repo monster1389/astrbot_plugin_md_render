@@ -67,10 +67,10 @@ def render_code(
         lexer = guess_lexer(code)
     formatter = ImageFormatter(
         style="material",
-        font_size=14,
+        font_size=29,  # 14pt @ 150 DPI (150/72 * 14 ≈ 29)
         line_numbers=False,
-        image_pad=10,
-        line_pad=4,
+        image_pad=21,  # 10px @ 150 DPI
+        line_pad=8,    # 4px @ 150 DPI
         font_name=mono_path or "DejaVuSansMono",
     )
     png_data = highlight(code_for_glyph, lexer, formatter)
