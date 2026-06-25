@@ -11,7 +11,7 @@ from render.code import render_code
 from render.expr import render_inline_expr, render_block_expr
 from render.parser import CodeBlock, BlockExpr, InlineExpr, Table
 from render.table import render_table
-from render.utils import RenderConfig, load_config
+from render.utils import RenderConfig
 
 
 def main():
