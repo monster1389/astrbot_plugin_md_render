@@ -2,12 +2,17 @@
 
 渲染文本前，逐字符检测目标字体是否覆盖该字形。
 若缺失，按配置的映射表替换为替代字符；无映射则保留原字符。
+提供 fallback_text（纯文本）和 fallback_spans（富文本 Span）两个入口。
 """
+
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 from PIL import ImageFont
+
+if TYPE_CHECKING:
+    from render.parser import RichCell  # noqa: F401
 
 
 def load_glyph_mapping(raw: str) -> dict[str, str]:
@@ -71,3 +76,23 @@ def fallback_text(text: str, mapping: dict[str, str], font: ImageFont.FreeTypeFo
     if font is None:
         return text
     return "".join(fallback(ch, mapping, font) for ch in text)
+
+
+def fallback_spans(
+    cells: list[list[RichCell]],
+    mapping: dict[str, str],
+    font: "ImageFont.FreeTypeFont | None" = None,
+) -> None:
+    """对 RichCell 中的 Span 文本逐字符应用字形回退（原地修改）。
+
+    Args:
+        cells: [[RichCell]] — [表头行, 数据行...]。
+        mapping: 字形缺失时的替代映射表。
+        font: PIL 字体对象，为 None 时跳过。
+    """
+    if font is None:
+        return
+    for row in cells:
+        for cell in row:
+            for span in cell.spans:
+                span.text = fallback_text(span.text, mapping, font)
