@@ -12,6 +12,19 @@ from pillowlatex import RenderLaTeX, GetLaTeXObjs
 from render.glyph import fallback_text
 from render.utils import RenderConfig, build_temp_path, find_font_path
 
+_font_cache: ImageFont.FreeTypeFont | None = None
+_font_path_cache: str | None = None
+
+
+def _get_font(data_dir: str) -> ImageFont.FreeTypeFont:
+    """获取缓存的字体，路径不变时复用。"""
+    global _font_cache, _font_path_cache
+    path = find_font_path(data_dir)
+    if path != _font_path_cache:
+        _font_cache = ImageFont.truetype(path, 20) if path else ImageFont.load_default()
+        _font_path_cache = path
+    return _font_cache
+
 
 def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
     """核心渲染逻辑：LaTeX 源码 → 合成背景色 PNG。
@@ -28,9 +41,8 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
         png_path 渲染产物文件路径。
     """
     # 字形回退
-    font_path = find_font_path(data_dir)
-    if cfg.glyph_mapping and font_path:
-        font = ImageFont.truetype(font_path, size=20)
+    if cfg.glyph_mapping:
+        font = _get_font(data_dir)
         latex_src = fallback_text(latex_src, cfg.glyph_mapping, font)
 
     objs = GetLaTeXObjs(latex_src)
