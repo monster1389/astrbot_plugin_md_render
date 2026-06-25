@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from PIL import ImageFont
 from pygments import highlight
@@ -13,27 +12,9 @@ from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer
 
 from render.glyph import fallback_text
-from render.utils import RenderConfig, build_temp_path
+from render.utils import RenderConfig, build_temp_path, find_font_path
 
 logger = logging.getLogger(__name__)
-
-def _find_mono_font_path(data_dir: str) -> str | None:
-    """返回第一个可用的等宽字体路径，都不存在返回 None。
-
-    优先使用捆绑的更纱等宽黑体（中英 2:1 等宽），
-    不存在时 fallback 到系统 DejaVu Sans Mono。
-
-    Args:
-        data_dir: 插件数据目录路径。
-    """
-    candidates = [
-        os.path.join(data_dir, "fonts", "SarasaMonoSC-Regular.ttf"),
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return None
 
 
 def render_code(
@@ -54,7 +35,7 @@ def render_code(
     lang: str = getattr(codeblock, "lang", "") or ""
     code: str = getattr(codeblock, "code", "")
 
-    mono_path = _find_mono_font_path(data_dir)
+    mono_path = find_font_path(data_dir)
     font = ImageFont.truetype(mono_path, 14) if mono_path else ImageFont.load_default()
 
     code_for_glyph = fallback_text(code, cfg.glyph_mapping, font)
