@@ -63,11 +63,9 @@ LLM/Star 生成消息
     │
     ▼
 OnDecoratingResultEvent (priority=1000)  ← 本插件
-    │  解析 Plain 中的代码块/表格
-    │  渲染为 Image(png) + File(.md)
-    │  替换到 result.chain
-    │  自然分段：以 Plain 为锚点，紧跟的非 Plain 归入同段
-    │  最后一段留在 chain 给 RespondStage
+    │  收集所有 Plain 文本，拼接后解析为 Segment 列表
+    │  按配置模式将各 Segment 渲染为 Image(png) / File(.md) / Plain
+    │  组装为新 chain，通过 result.chain = built 整链替换
     │
     ▼
 RespondStage 发送最终 chain
@@ -102,7 +100,7 @@ RespondStage 发送最终 chain
 
 ### 依赖
 
-`pygments`, `pillow`, `matplotlib`, `markdown-it-py`, `pillowlatex`
+`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`
 
 ### 配置
 
