@@ -30,10 +30,27 @@ class CodeBlock:
 
 
 @dataclass
+class Span:
+    """富文本 Span——携带格式状态。"""
+    text: str
+    bold: bool = False
+    italic: bool = False
+    strike: bool = False
+    code: bool = False
+    link_url: str = ""
+
+
+@dataclass
+class RichCell:
+    """富文本单元格。"""
+    spans: list[Span]
+
+
+@dataclass
 class Table:
     """表格。"""
-    headers: list[str]
-    rows: list[list[str]]
+    headers: list[RichCell]
+    rows: list[list[RichCell]]
 
 
 @dataclass
