@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Callable
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
@@ -95,12 +95,12 @@ def build_chain(
 
 
 def _dispatch(
-    chain: list,
+    chain: list[Plain | Image | AstrFile],
     raw_text: str,
     mode: str,
     data_dir: str,
     prefix: str,
-    render_fn,
+    render_fn: Callable[[], str | tuple[str, str]],
     has_file_mode: bool,
 ) -> None:
     """统一分发：按 mode 决定渲染/文件/原文策略。
