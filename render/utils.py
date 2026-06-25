@@ -97,7 +97,7 @@ def build_temp_path(data_dir: str, prefix: str, ext: str) -> str:
     Args:
         data_dir: 插件数据目录路径。
         prefix: 文件名前缀（如 'code'、'table'、'expr'）。
-        ext: 文件扩展名（如 '.png'、'.txt'）。
+        ext: 文件扩展名（如 '.png'、'.md'）。
 
     Returns:
         完整文件路径。

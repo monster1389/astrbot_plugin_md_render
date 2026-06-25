@@ -38,7 +38,6 @@ _FONT_URLS = [
 def _download_sarasa_font(fonts_dir: str) -> bool:
     """尝试下载更纱等宽黑体，成功返回 True，失败返回 False。
 
-    依次尝试 GitHub Releases 和 ghproxy 镜像，
     用 py7zr 从 7z 压缩包中提取 SarasaMonoSC-Regular.ttf。
 
     Args:
@@ -82,6 +81,7 @@ class MdRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
         self.config: dict[str, Any] = config or {}
+        self.cfg = None
 
     async def initialize(self):
         """插件初始化。"""
@@ -93,8 +93,8 @@ class MdRenderPlugin(Star):
         font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
         if not os.path.exists(font_path):
             asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
-        cfg = load_config(self.config)
-        _start_cleaner(str(data_dir), cfg.temp_ttl)
+        self.cfg = load_config(self.config)
+        _start_cleaner(str(data_dir), self.cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
 
     @filter.on_decorating_result(priority=1000)
@@ -134,8 +134,7 @@ class MdRenderPlugin(Star):
         if not has_elements:
             return
 
-        cfg = load_config(self.config)
-        built = build_chain(segments, cfg, data_dir)
+        built = build_chain(segments, self.cfg, data_dir)
 
         # 汇总日志（0 则静默）
         image_count = sum(1 for item in built if isinstance(item, Image))
@@ -143,12 +142,12 @@ class MdRenderPlugin(Star):
         total = image_count + file_count
         if total > 0:
             parts: list[str] = []
-            if cfg.code_mode != "不处理":
-                parts.append(f"代码块({cfg.code_mode})")
-            if cfg.table_mode != "不处理":
-                parts.append(f"表格({cfg.table_mode})")
-            if cfg.expr_mode != "不处理":
-                parts.append(f"表达式({cfg.expr_mode})")
+            if self.cfg.code_mode != "不处理":
+                parts.append(f"代码块({self.cfg.code_mode})")
+            if self.cfg.table_mode != "不处理":
+                parts.append(f"表格({self.cfg.table_mode})")
+            if self.cfg.expr_mode != "不处理":
+                parts.append(f"表达式({self.cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
         result.chain = built
