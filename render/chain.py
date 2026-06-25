@@ -14,6 +14,7 @@ from render.parser import (
     CodeBlock,
     Divider,
     InlineExpr,
+    RichCell,
     Segment,
     Table,
 )
@@ -224,9 +225,26 @@ def _table_to_text(table: Table) -> str:
     Returns:
         markdown 表格文本。
     """
+    def _cell_text(cell: RichCell) -> str:
+        parts: list[str] = []
+        for span in cell.spans:
+            s = span.text
+            if span.code:
+                s = f"`{s}`"
+            if span.strike:
+                s = f"~~{s}~~"
+            if span.italic:
+                s = f"*{s}*"
+            if span.bold:
+                s = f"**{s}**"
+            if span.link_url:
+                s = f"[{s}]({span.link_url})"
+            parts.append(s)
+        return "".join(parts)
+
     lines: list[str] = []
-    lines.append("| " + " | ".join(table.headers) + " |")
+    lines.append("| " + " | ".join(_cell_text(h) for h in table.headers) + " |")
     lines.append("|" + "|".join(["---" for _ in table.headers]) + "|")
     for row in table.rows:
-        lines.append("| " + " | ".join(row) + " |")
+        lines.append("| " + " | ".join(_cell_text(c) for c in row) + " |")
     return "\n".join(lines)
