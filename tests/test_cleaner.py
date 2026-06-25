@@ -12,7 +12,7 @@ class TestParseFileTs:
 
     def test_valid_filename(self):
         """正确的文件名格式能解析出时间戳。"""
-        ts = _parse_file_ts("table_20260624_114940.png")
+        ts = _parse_file_ts("table_20260624_114940_123456.png")
         assert ts is not None
         assert ts.year == 2026
         assert ts.month == 6
@@ -27,9 +27,19 @@ class TestParseFileTs:
 
     def test_code_filename(self):
         """代码块文件名也能解析。"""
-        ts = _parse_file_ts("code_20260624_114940.txt")
+        ts = _parse_file_ts("code_20260624_114940_123456.md")
         assert ts is not None
         assert ts.minute == 49
+
+    def test_md_extension(self):
+        """.md 扩展名可被解析。"""
+        ts = _parse_file_ts("table_20260624_114940_654321.md")
+        assert ts is not None
+        assert ts.second == 40
+
+    def test_old_format_no_longer_matches(self):
+        """旧格式（无微秒）文件名不再匹配。"""
+        assert _parse_file_ts("table_20260624_114940.png") is None
 
 
 class TestCleaner:
@@ -40,7 +50,7 @@ class TestCleaner:
     def test_cleanup_skip_permanent(self, mock_listdir, mock_remove):
         """TTL=-1 不删除任何文件。"""
         temp_dir = "/tmp/test_temp"
-        mock_listdir.return_value = ["table_20260624_114940.png"]
+        mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
         from render.cleaner import _scan_and_clean
 
@@ -53,8 +63,8 @@ class TestCleaner:
         """TTL=0 删除所有解析成功的文件。"""
         temp_dir = "/tmp/test_temp"
         mock_listdir.return_value = [
-            "table_20260624_114940.png",
-            "expr_20260624_114940.png",
+            "table_20260624_114940_123456.png",
+            "expr_20260624_114940_123456.png",
             "random.txt",
         ]
 
@@ -68,11 +78,11 @@ class TestCleaner:
     def test_cleanup_expired(self, mock_listdir, mock_remove):
         """TTL>0 只删除过期文件。
 
-        table_20260624_114940.png → datetime(2026,6,24,11,49,40)
+        table_20260624_114940_123456.png → datetime(2026,6,24,11,49,40)
         _now = 12:00:00 → age ≈ 10.33min > 5min TTL → 应删除。
         """
         temp_dir = "/tmp/test_temp"
-        mock_listdir.return_value = ["table_20260624_114940.png"]
+        mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
         from render.cleaner import _scan_and_clean
 
@@ -89,11 +99,11 @@ class TestCleaner:
     def test_cleanup_not_expired(self, mock_listdir, mock_remove):
         """TTL>0 不删除未过期文件。
 
-        table_20260624_114940.png → datetime(2026,6,24,11,49,40)
+        table_20260624_114940_123456.png → datetime(2026,6,24,11,49,40)
         _now = 11:50:00 → age ≈ 0.33min < 5min TTL → 不删除。
         """
         temp_dir = "/tmp/test_temp"
-        mock_listdir.return_value = ["table_20260624_114940.png"]
+        mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
         from render.cleaner import _scan_and_clean
 

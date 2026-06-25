@@ -13,7 +13,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 _FILENAME_RE = re.compile(
-    r"^(code|table|expr)_(\d{8})_(\d{6})\.(png|txt)$"
+    r"^(code|table|expr)_(\d{8})_(\d{6})_\d{6}\.(png|md)$"
 )
 
 
@@ -21,7 +21,7 @@ def _parse_file_ts(filename: str) -> datetime | None:
     """从渲染产物文件名解析时间戳。
 
     Args:
-        filename: 文件名，如 table_20260624_114940.png。
+        filename: 文件名，如 table_20260624_114940_123456.png。
 
     Returns:
         解析出的 datetime，格式不符返回 None。

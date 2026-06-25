@@ -42,7 +42,7 @@ def load_config(raw: dict) -> RenderConfig:
         RenderConfig 实例。
     """
     return RenderConfig(
-        code_mode=raw.get("代码块", "渲染且txt"),
+        code_mode=raw.get("代码块", "渲染且md文件"),
         table_mode=raw.get("表格", "渲染图像"),
         expr_mode=raw.get("表达式", "渲染图像"),
         divider_mode=raw.get("分隔线", "不处理"),
