@@ -26,9 +26,9 @@ _RGB_CODE_BG = (50, 50, 70)
 _RGB_CODE = (150, 220, 150)
 _RGB_LINK = (120, 180, 255)
 
-_FONT_SIZE = 29  # 14pt @ 150 DPI 等效 (150/72*14≈29)
-_PAD_X = 21      # 10px @ 150 DPI 等效
-_PAD_Y = 15      # 7px @ 150 DPI 等效
+_FONT_SIZE = 38  # 18pt @ 150 DPI 等效 (150/72*18≈38)
+_PAD_X = 27      # 10pt @ 150 DPI 等效
+_PAD_Y = 20      # 7pt @ 150 DPI 等效
 _DPI = 2
 _MARGIN = 20     # 10px 外边距 @ 2x 内部分辨率
 _STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩放后）

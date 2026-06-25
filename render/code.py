@@ -48,9 +48,9 @@ def render_code(
         lexer = guess_lexer(code)
     formatter = ImageFormatter(
         style="material",
-        font_size=29,  # 14pt @ 150 DPI (150/72 * 14 ≈ 29)
+        font_size=38,  # 18pt @ 150 DPI (150/72 * 18 ≈ 38)
         line_numbers=False,
-        image_pad=21,  # 10px @ 150 DPI
+        image_pad=27,  # 10pt @ 150 DPI
         line_pad=8,    # 4px @ 150 DPI
         font_name=mono_path or "DejaVuSansMono",
     )
