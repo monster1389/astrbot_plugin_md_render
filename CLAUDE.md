@@ -87,7 +87,7 @@ RespondStage 发送最终 chain
 |------|------|
 | `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider |
 | `render/code.py` | pygments → pillow 渲染代码块为 PNG，同时写 .md 围栏文件 |
-| `render/table.py` | matplotlib.table 渲染表格为 PNG |
+| `render/table.py` | Pillow 手绘表格为 PNG，支持格内加粗/斜体/删除线/行内代码/链接混排 |
 | `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级）为 PNG |
 | `render/glyph.py` | 字形回退：检测字符是否在字体中，按映射表替换缺失字形 |
 | `render/chain.py` | 按配置模式将解析结果组装为消息链，路由到各渲染模块 |

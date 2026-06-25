@@ -9,7 +9,7 @@ from astrbot.api.star import StarTools
 
 from render.code import render_code
 from render.expr import render_inline_expr, render_block_expr
-from render.parser import CodeBlock, BlockExpr, InlineExpr, Table
+from render.parser import CodeBlock, BlockExpr, InlineExpr, RichCell, Span, Table
 from render.table import render_table
 from render.utils import RenderConfig
 
@@ -43,13 +43,39 @@ print([fibonacci(i) for i in range(10)])""")
     os.rename(png, os.path.join(out, "code.png"))
     print("code.png done")
 
-    # 表格
+    # 表格（含格内格式）
     t = Table(
-        headers=["方案", "可行", "原因"],
+        headers=[RichCell(spans=[Span(text="格式")]), RichCell(spans=[Span(text="示例")])],
         rows=[
-            ["minutely API", "❌", "免费 key 无权限"],
-            ["升级付费 key", "⚠️", "能拿，要钱"],
-            ["仅用逐小时降水", "✅", "已接入 fill_between"],
+            [
+                RichCell(spans=[Span(text="加粗")]),
+                RichCell(spans=[Span(text="重要数据", bold=True)]),
+            ],
+            [
+                RichCell(spans=[Span(text="斜体")]),
+                RichCell(spans=[Span(text="备注说明", italic=True)]),
+            ],
+            [
+                RichCell(spans=[Span(text="删除线")]),
+                RichCell(spans=[Span(text="已废弃", strike=True)]),
+            ],
+            [
+                RichCell(spans=[Span(text="行内代码")]),
+                RichCell(spans=[Span(text="config.py", code=True)]),
+            ],
+            [
+                RichCell(spans=[Span(text="链接")]),
+                RichCell(spans=[Span(text="文档", link_url="https://docs.x.com")]),
+            ],
+            [
+                RichCell(spans=[Span(text="混合")]),
+                RichCell(spans=[
+                    Span(text="粗", bold=True),
+                    Span(text="斜", italic=True),
+                    Span(text="删", strike=True),
+                    Span(text="码", code=True),
+                ]),
+            ],
         ],
     )
     png = render_table(t, cfg, data_dir)
