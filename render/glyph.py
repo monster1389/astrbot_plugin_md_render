@@ -7,10 +7,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
-from astrbot.api import logger
 from PIL import ImageFont
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from render.parser import RichCell  # noqa: F401

@@ -9,7 +9,7 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 
 from render.glyph import fallback_spans
-from render.parser import RichCell, Span
+from render.parser import RichCell, Span, Table
 from render.utils import RenderConfig, build_temp_path, find_font_path
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,24 @@ _DPI = 2
 _MARGIN = 20     # 10px 外边距 @ 2x 内部分辨率
 _STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩放后）
 
+_font_cache: ImageFont.FreeTypeFont | None = None
+_font_path_cache: str | None = None
+
+
+def _get_font(data_dir: str) -> ImageFont.FreeTypeFont:
+    """获取缓存的字体，路径不变时复用。"""
+    global _font_cache, _font_path_cache
+    path = find_font_path(data_dir)
+    if path is None:
+        logger.warning("未找到 CJK 字体，表格中文可能显示为豆腐块")
+    if path != _font_path_cache:
+        _font_cache = ImageFont.truetype(path, _FONT_SIZE * _DPI) if path else ImageFont.load_default()
+        _font_path_cache = path
+    return _font_cache
+
 
 def render_table(
-    table: object,
+    table: Table,
     cfg: RenderConfig,
     data_dir: str,
 ) -> str:
@@ -49,15 +64,11 @@ def render_table(
     Returns:
         png_path 渲染产物文件路径。
     """
-    headers: list[RichCell] = getattr(table, "headers", [])
-    rows: list[list[RichCell]] = getattr(table, "rows", [])
+    headers: list[RichCell] = table.headers
+    rows: list[list[RichCell]] = table.rows
 
-    font_path = find_font_path(data_dir)
-    if font_path is None:
-        logger.warning("未找到 CJK 字体，表格中文可能显示为豆腐块")
-
-    font_reg = ImageFont.truetype(font_path, _FONT_SIZE * _DPI) if font_path else ImageFont.load_default()
-    font_bold = ImageFont.truetype(font_path, _FONT_SIZE * _DPI) if font_path else ImageFont.load_default()
+    font_reg = _get_font(data_dir)
+    font_bold = font_reg
 
     # 字形回退
     all_rows: list[list[RichCell]] = []
