@@ -17,7 +17,7 @@ from typing import Any
 import py7zr
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Image, File as AstrFile
 from astrbot.api.star import Context, Star, StarTools, register
 
@@ -63,6 +63,29 @@ def _download_sarasa_font(fonts_dir: str) -> bool:
         except Exception:
             logger.warning("从 %s 下载更纱字体失败", url, exc_info=True)
     return False
+
+
+def _split_batches(chain: list) -> list[list]:
+    """将消息链按图片/文件切分为批次，每批至多一个图片/文件。
+
+    Args:
+        chain: build_chain 返回的组件列表。
+
+    Returns:
+        批次列表，每个批次是一个组件列表。
+    """
+    batches: list[list] = []
+    current: list = []
+    for comp in chain:
+        if isinstance(comp, (Image, AstrFile)):
+            current.append(comp)
+            batches.append(current)
+            current = []
+        else:
+            current.append(comp)
+    if current:
+        batches.append(current)
+    return batches
 
 
 @register(
@@ -150,7 +173,17 @@ class MdRenderPlugin(Star):
                 parts.append(f"表达式({self.cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
-        result.chain = built
+        # 分批发送：每张图片独立一条消息，避免多图串行上传造成长延迟
+        batches = _split_batches(built)
+        if len(batches) > 1:
+            for batch in batches[:-1]:
+                mc = MessageChain()
+                mc.chain = batch
+                await self.context.send_message(event.unified_msg_origin, mc)
+                await asyncio.sleep(0.2)
+            result.chain = batches[-1]
+        else:
+            result.chain = built
 
     async def terminate(self):
         """插件销毁。"""
