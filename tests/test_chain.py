@@ -1,4 +1,5 @@
 """消息链组装与分段测试。"""
+import asyncio
 from unittest.mock import patch
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
@@ -16,7 +17,6 @@ def _make_cfg(**overrides):
         "divider_mode": "不处理",
         "font_color": "#000",
         "bg_color": "#FFF",
-        "glyph_mapping": {},
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))
@@ -29,7 +29,7 @@ class TestBuildChain:
 
         segments = [Segment(text="Hello")]
         cfg = _make_cfg()
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "Hello"
@@ -40,7 +40,7 @@ class TestBuildChain:
 
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="不处理")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
@@ -50,10 +50,10 @@ class TestBuildChain:
         """代码块渲染图像模式：只有 Image 没有 File 也没有原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
+        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
@@ -62,10 +62,10 @@ class TestBuildChain:
         """渲染且md文件：Image + File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
+        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且md文件")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
 
@@ -74,10 +74,10 @@ class TestBuildChain:
         """渲染且保留原文：原文 Plain + Image，无 File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = ("/tmp/code_001.png", "/tmp/code_001.md")
+        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert "x=1" in result[0].text
@@ -88,10 +88,10 @@ class TestBuildChain:
         """表格渲染图像模式。"""
         from render.chain import build_chain
 
-        mock_render.return_value = "/tmp/table_001.png"
+        mock_render.return_value = b"fake_png_data"
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert isinstance(result[0], Image)
 
     def test_divider_split(self):
@@ -100,7 +100,7 @@ class TestBuildChain:
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
         cfg = _make_cfg(divider_mode="切分")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 2
         assert all(isinstance(c, Plain) for c in result)
 
@@ -109,10 +109,10 @@ class TestBuildChain:
         """行内表达式渲染图像模式。"""
         from render.chain import build_chain
 
-        mock_render.return_value = "/tmp/expr_001.png"
+        mock_render.return_value = b"fake_png_data"
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
@@ -123,7 +123,7 @@ class TestBuildChain:
 
         segments = [BlockExpr(expr="\\int x dx")]
         cfg = _make_cfg(expr_mode="不处理")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "$$" in result[0].text
@@ -140,10 +140,10 @@ class TestBuildChain:
             code_mode="渲染图像", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
             font_color="#000", bg_color="#FFF",
-            glyph_mapping={}, temp_ttl=5,
+            temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
         assert isinstance(result[1], Plain)
@@ -160,10 +160,10 @@ class TestBuildChain:
             code_mode="渲染且保留原文", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
             font_color="#000", bg_color="#FFF",
-            glyph_mapping={}, temp_ttl=5,
+            temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1")]
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
 
@@ -174,7 +174,7 @@ class TestBuildChain:
 
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="仅md文件")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
         mock_render.assert_not_called()
@@ -186,7 +186,7 @@ class TestBuildChain:
 
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="仅md文件")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
         mock_render.assert_not_called()
@@ -196,10 +196,10 @@ class TestBuildChain:
         """渲染且md文件模式：Image + File，无 Plain 原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = "/tmp/table_001.png"
+        mock_render.return_value = b"fake_png_data"
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染且md文件")
-        result = build_chain(segments, cfg, "/tmp")
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
         assert len(result) == 2
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)

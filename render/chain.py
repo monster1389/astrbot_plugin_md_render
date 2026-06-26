@@ -202,11 +202,18 @@ async def build_chain(
     Returns:
         AstrBot Component 对象列表。
     """
-    # 第一遍：收集可渲染的 segment 索引和协程
+    # 第一遍：收集需要渲染的 segment 索引和协程
     indices: list[int] = []
     coros: list[asyncio.Future] = []
     for i, seg in enumerate(segments):
-        if isinstance(seg, (CodeBlock, Table, InlineExpr, BlockExpr)):
+        mode = None
+        if isinstance(seg, CodeBlock):
+            mode = cfg.code_mode
+        elif isinstance(seg, Table):
+            mode = cfg.table_mode
+        elif isinstance(seg, (InlineExpr, BlockExpr)):
+            mode = cfg.expr_mode
+        if mode is not None and mode not in ("不处理", "仅md文件"):
             fn = _make_render_fn(seg, cfg, data_dir)
             indices.append(i)
             coros.append(asyncio.to_thread(fn))
@@ -231,6 +238,8 @@ async def build_chain(
     for i, seg in enumerate(segments):
         if i in results:
             _dispatch_result(chain, seg, results[i], cfg, data_dir)
+        elif isinstance(seg, (CodeBlock, Table, InlineExpr, BlockExpr)):
+            _dispatch_result(chain, seg, None, cfg, data_dir)
         elif isinstance(seg, Segment):
             chain.append(Plain(seg.text))
 
