@@ -40,7 +40,7 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> bytes:
     result.paste(text_layer, (pad, pad), render_img.split()[3])
 
     buf = BytesIO()
-    result.save(buf, "PNG")
+    result.save(buf, "PNG", optimize=True)
     return buf.getvalue()
 
 

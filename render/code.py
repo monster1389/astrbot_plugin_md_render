@@ -4,7 +4,10 @@
 """
 from __future__ import annotations
 
+import io
 import logging
+
+from PIL import Image
 
 from pygments import highlight
 from pygments.formatters.img import ImageFormatter
@@ -48,6 +51,13 @@ def render_code(
         font_name=find_font_path(data_dir) or "DejaVuSansMono",
     )
     png_data = highlight(code, lexer, formatter)
+
+    # 转自适应调色板以压缩体积（语法高亮颜色数有限，128 色足够无损）
+    img = Image.open(io.BytesIO(png_data))
+    img = img.convert("P", palette=Image.Palette.ADAPTIVE, colors=128)
+    buf = io.BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    png_data = buf.getvalue()
 
     return png_data, f"```{lang}\n{code}\n```"
 

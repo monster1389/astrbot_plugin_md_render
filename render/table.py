@@ -141,7 +141,7 @@ def render_table(
 
     from io import BytesIO
     buf = BytesIO()
-    img.save(buf, "PNG")
+    img.save(buf, "PNG", optimize=True)
     return buf.getvalue()
 
 

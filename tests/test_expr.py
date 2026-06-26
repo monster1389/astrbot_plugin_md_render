@@ -36,7 +36,7 @@ class TestRenderExpr:
         mock_render.return_value.img = mock_render_img
 
         mock_result = MagicMock()
-        mock_result.save.side_effect = lambda buf, fmt=None: buf.write(b"fake_png")
+        mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
         expr = InlineExpr(expr="E=mc^2")
@@ -64,7 +64,7 @@ class TestRenderExpr:
         mock_render.return_value.img = mock_render_img
 
         mock_result = MagicMock()
-        mock_result.save.side_effect = lambda buf, fmt=None: buf.write(b"fake_png")
+        mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
         expr = BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1")
