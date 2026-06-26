@@ -5,28 +5,16 @@
 """
 from __future__ import annotations
 
-from PIL import Image, ImageFont
+from io import BytesIO
 
-from pillowlatex import RenderLaTeX, GetLaTeXObjs
+from PIL import Image
 
-from render.glyph import fallback_text
-from render.utils import RenderConfig, build_temp_path, find_font_path
+from pillowlatex import GetLaTeXObjs, RenderLaTeX
 
-_font_cache: ImageFont.FreeTypeFont | None = None
-_font_path_cache: str | None = None
+from render.utils import RenderConfig, get_font
 
 
-def _get_font(data_dir: str) -> ImageFont.FreeTypeFont:
-    """获取缓存的字体，路径不变时复用。"""
-    global _font_cache, _font_path_cache
-    path = find_font_path(data_dir)
-    if path != _font_path_cache:
-        _font_cache = ImageFont.truetype(path, 20) if path else ImageFont.load_default()
-        _font_path_cache = path
-    return _font_cache
-
-
-def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
+def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> bytes:
     """核心渲染逻辑：LaTeX 源码 → 合成背景色 PNG。
 
     pillowlatex 渲染黑字透明背景，用 alpha 通道将文字着色后
@@ -38,13 +26,8 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
         data_dir: 插件数据目录路径。
 
     Returns:
-        png_path 渲染产物文件路径。
+        渲染产物 PNG 字节串。
     """
-    # 字形回退
-    if cfg.glyph_mapping:
-        font = _get_font(data_dir)
-        latex_src = fallback_text(latex_src, cfg.glyph_mapping, font)
-
     objs = GetLaTeXObjs(latex_src)
     rendered = RenderLaTeX(objs)
     render_img = rendered.img  # RGBA，黑字透明背景
@@ -56,16 +39,16 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> str:
     text_layer = Image.new("RGB", render_img.size, cfg.font_color)
     result.paste(text_layer, (pad, pad), render_img.split()[3])
 
-    png_path = build_temp_path(data_dir, "expr", ".png")
-    result.save(png_path)
-    return png_path
+    buf = BytesIO()
+    result.save(buf, "PNG")
+    return buf.getvalue()
 
 
 def render_inline_expr(
     expr: object,
     cfg: RenderConfig,
     data_dir: str,
-) -> str:
+) -> bytes:
     """渲染行内表达式 $...$ 为 PNG。
 
     Args:
@@ -74,7 +57,7 @@ def render_inline_expr(
         data_dir: 插件数据目录路径。
 
     Returns:
-        png_path 渲染产物文件路径。
+        渲染产物 PNG 字节串。
     """
     latex = getattr(expr, "expr", "")
     return _render_latex(latex, cfg, data_dir)
@@ -84,7 +67,7 @@ def render_block_expr(
     expr: object,
     cfg: RenderConfig,
     data_dir: str,
-) -> str:
+) -> bytes:
     """渲染块级表达式 $$...$$ 为 PNG。
 
     Args:
@@ -93,7 +76,7 @@ def render_block_expr(
         data_dir: 插件数据目录路径。
 
     Returns:
-        png_path 渲染产物文件路径。
+        渲染产物 PNG 字节串。
     """
     latex = getattr(expr, "expr", "")
     return _render_latex(latex, cfg, data_dir)

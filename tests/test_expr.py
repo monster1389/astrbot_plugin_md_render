@@ -1,9 +1,8 @@
 """表达式渲染测试。"""
-import os
 from unittest.mock import MagicMock, patch
 
 from render.expr import render_inline_expr, render_block_expr
-from render.parser import InlineExpr, BlockExpr
+from render.parser import BlockExpr, InlineExpr
 from render.utils import RenderConfig
 
 
@@ -23,12 +22,11 @@ def _make_cfg(**overrides):
 
 
 class TestRenderExpr:
-    @patch("render.expr.find_font_path", return_value=None)
     @patch("render.expr.Image")
     @patch("render.expr.RenderLaTeX")
     @patch("render.expr.GetLaTeXObjs")
-    def test_inline_expr(self, mock_getlatex, mock_render, mock_pil_image, mock_font_path):
-        """行内表达式渲染返回 png 路径，先解析 LaTeX 再渲染。"""
+    def test_inline_expr(self, mock_getlatex, mock_render, mock_pil_image):
+        """行内表达式渲染返回 PNG 字节串，先解析 LaTeX 再渲染。"""
         parsed = MagicMock()
         mock_getlatex.return_value = parsed
 
@@ -39,24 +37,24 @@ class TestRenderExpr:
         mock_render.return_value.img = mock_render_img
 
         mock_result = MagicMock()
+        mock_result.save.side_effect = lambda buf, fmt=None: buf.write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
         expr = InlineExpr(expr="E=mc^2")
         cfg = _make_cfg()
-        png_path = render_inline_expr(expr, cfg, data_dir="/tmp")
+        png_bytes = render_inline_expr(expr, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
-        assert os.path.basename(png_path).startswith("expr_")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_getlatex.assert_called_once_with("E=mc^2")
         mock_render.assert_called_once_with(parsed)
         mock_result.save.assert_called_once()
 
-    @patch("render.expr.find_font_path", return_value=None)
     @patch("render.expr.Image")
     @patch("render.expr.RenderLaTeX")
     @patch("render.expr.GetLaTeXObjs")
-    def test_block_expr(self, mock_getlatex, mock_render, mock_pil_image, mock_font_path):
-        """块级表达式渲染，先解析 LaTeX 再渲染。"""
+    def test_block_expr(self, mock_getlatex, mock_render, mock_pil_image):
+        """块级表达式渲染返回 PNG 字节串，先解析 LaTeX 再渲染。"""
         parsed = MagicMock()
         mock_getlatex.return_value = parsed
 
@@ -67,14 +65,15 @@ class TestRenderExpr:
         mock_render.return_value.img = mock_render_img
 
         mock_result = MagicMock()
+        mock_result.save.side_effect = lambda buf, fmt=None: buf.write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
         expr = BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1")
         cfg = _make_cfg()
-        png_path = render_block_expr(expr, cfg, data_dir="/tmp")
+        png_bytes = render_block_expr(expr, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
-        assert os.path.basename(png_path).startswith("expr_")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_getlatex.assert_called_once_with(
             "\\int_0^\\infty e^{-x} dx = 1"
         )
