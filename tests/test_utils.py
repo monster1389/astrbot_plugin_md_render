@@ -56,8 +56,7 @@ class TestLoadConfig:
         assert cfg.divider_mode == "不处理"
         assert cfg.font_color == "#9CDCFE"
         assert cfg.bg_color == "#1E1E1E"
-        assert cfg.glyph_mapping == {}
-        assert cfg.temp_ttl == 5
+        assert cfg.temp_ttl == 0
 
     def test_custom_values(self):
         raw = {
@@ -88,7 +87,6 @@ class TestRenderConfig:
             divider_mode="不处理",
             font_color="#000",
             bg_color="#FFF",
-            glyph_mapping={},
             temp_ttl=5,
         )
         try:

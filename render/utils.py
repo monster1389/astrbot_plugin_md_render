@@ -9,8 +9,6 @@ from datetime import datetime
 
 from PIL import ImageFont
 
-from render.glyph import load_glyph_mapping
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +53,6 @@ class RenderConfig:
         divider_mode: 水平分割线处理模式。
         font_color: 字体颜色（纯 hex）。
         bg_color: 背景颜色（纯 hex）。
-        glyph_mapping: 字形映射表。
         temp_ttl: 临时文件存活分钟数。
     """
     code_mode: str
@@ -64,7 +61,6 @@ class RenderConfig:
     divider_mode: str
     font_color: str
     bg_color: str
-    glyph_mapping: dict
     temp_ttl: int
 
 
@@ -84,8 +80,7 @@ def load_config(raw: dict) -> RenderConfig:
         divider_mode=raw.get("分隔线", "不处理"),
         font_color=parse_color(raw.get("字体颜色", "#9CDCFE (浅蓝)")),
         bg_color=parse_color(raw.get("背景颜色", "#1E1E1E (VS Code 深色)")),
-        glyph_mapping=load_glyph_mapping(raw.get("字形映射", "{}")),
-        temp_ttl=int(raw.get("临时文件存活", 5)),
+        temp_ttl=int(raw.get("临时文件存活", 0)),
     )
 
 

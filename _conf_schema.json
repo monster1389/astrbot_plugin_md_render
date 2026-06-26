@@ -35,18 +35,10 @@
     "options": ["#1E1E1E (VS Code 深色)", "#2D2D2D (浅深色)", "#000000 (纯黑)", "#FFFFFF (纯白)"],
     "default": "#1E1E1E (VS Code 深色)"
   },
-  "字形映射": {
-    "type": "text",
-    "description": "缺失字形替代映射",
-    "editor_mode": true,
-    "editor_language": "json",
-    "default": "{\n  \"✗\": \"✕\",\n  \"✓\": \"✔\",\n  \"✅\": \"✔\",\n  \"—\": \"-\",\n  \"–\": \"-\",\n  \"…\": \"...\",\n  \"　\": \" \"\n}",
-    "hint": "若字体缺少某个字符的字形，自动按此表替换为相似字符，避免显示豆腐块。"
-  },
   "临时文件存活": {
     "type": "int",
     "description": "临时文件存活时长（分钟）",
-    "default": 5,
+    "default": 0,
     "hint": "0=即时删除, -1=永久保留"
   }
 }

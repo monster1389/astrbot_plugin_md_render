@@ -15,7 +15,6 @@ def _make_cfg(**overrides):
         "divider_mode": "不处理",
         "font_color": "#9CDCFE",
         "bg_color": "#1E1E1E",
-        "glyph_mapping": {},
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))

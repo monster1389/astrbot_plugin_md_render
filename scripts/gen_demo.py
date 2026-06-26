@@ -26,7 +26,6 @@ def main():
         divider_mode="不处理",
         font_color="#9CDCFE",
         bg_color="#1E1E1E",
-        glyph_mapping={"✗": "✕", "✓": "✔", "✅": "✔", "—": "-", "–": "-", "…": "...", "　": " "},
         temp_ttl=5,
     )
 
@@ -39,8 +38,9 @@ def main():
 
 # 前 10 项
 print([fibonacci(i) for i in range(10)])""")
-    png, _ = render_code(cb, cfg, data_dir)
-    os.rename(png, os.path.join(out, "code.png"))
+    png_bytes, _ = render_code(cb, cfg, data_dir)
+    with open(os.path.join(out, "code.png"), "wb") as f:
+        f.write(png_bytes)
     print("code.png done")
 
     # 表格（含格内格式）
@@ -78,20 +78,23 @@ print([fibonacci(i) for i in range(10)])""")
             ],
         ],
     )
-    png = render_table(t, cfg, data_dir)
-    os.rename(png, os.path.join(out, "table.png"))
+    png_bytes = render_table(t, cfg, data_dir)
+    with open(os.path.join(out, "table.png"), "wb") as f:
+        f.write(png_bytes)
     print("table.png done")
 
     # 行内表达式
     ie = InlineExpr(expr="E=mc^2")
-    png = render_inline_expr(ie, cfg, data_dir)
-    os.rename(png, os.path.join(out, "inline_expr.png"))
+    png_bytes = render_inline_expr(ie, cfg, data_dir)
+    with open(os.path.join(out, "inline_expr.png"), "wb") as f:
+        f.write(png_bytes)
     print("inline_expr.png done")
 
     # 块级表达式
     be = BlockExpr(expr=r"\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}")
-    png = render_block_expr(be, cfg, data_dir)
-    os.rename(png, os.path.join(out, "block_expr.png"))
+    png_bytes = render_block_expr(be, cfg, data_dir)
+    with open(os.path.join(out, "block_expr.png"), "wb") as f:
+        f.write(png_bytes)
     print("block_expr.png done")
 
     print("\n效果图已生成:", sorted(os.listdir(out)))

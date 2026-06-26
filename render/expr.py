@@ -11,7 +11,7 @@ from PIL import Image
 
 from pillowlatex import GetLaTeXObjs, RenderLaTeX
 
-from render.utils import RenderConfig, get_font
+from render.utils import RenderConfig
 
 
 def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> bytes:
