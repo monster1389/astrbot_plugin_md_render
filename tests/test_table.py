@@ -1,11 +1,8 @@
 """表格渲染测试。"""
-import os
 from unittest.mock import MagicMock, patch
 
 from render.parser import RichCell, Span, Table
 from render.utils import RenderConfig
-
-_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
 
 def _make_cfg(**overrides):
@@ -29,12 +26,19 @@ def _cell(text: str) -> RichCell:
 class TestRenderTable:
     @patch("render.table.ImageDraw")
     @patch("render.table.Image")
-    @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_renders_simple_table(self, mock_font, mock_img_cls, mock_draw_cls):
-        """简单表格渲染返回 png 路径。"""
+    @patch("render.table.get_font")
+    def test_renders_simple_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
+        """简单表格渲染返回字节数据。"""
+        mock_font = MagicMock()
+        mock_font.getbbox.return_value = (0, 0, 100, 20)
+        mock_get_font.return_value = mock_font
         mock_img = MagicMock()
         mock_img.resize.return_value = mock_img
         mock_img_cls.new.return_value = mock_img
+
+        def save_side_effect(buf, *args, **kwargs):
+            buf.write(b"fake_png_data")
+        mock_img.save.side_effect = save_side_effect
 
         tbl = Table(
             headers=[_cell("姓名"), _cell("年龄")],
@@ -43,38 +47,53 @@ class TestRenderTable:
         cfg = _make_cfg()
 
         from render.table import render_table
-        png_path = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
-        assert os.path.basename(png_path).startswith("table_")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
     @patch("render.table.ImageDraw")
     @patch("render.table.Image")
-    @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_empty_table(self, mock_font, mock_img_cls, mock_draw_cls):
+    @patch("render.table.get_font")
+    def test_empty_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """空表格也能渲染。"""
+        mock_font = MagicMock()
+        mock_font.getbbox.return_value = (0, 0, 100, 20)
+        mock_get_font.return_value = mock_font
         mock_img = MagicMock()
         mock_img.resize.return_value = mock_img
         mock_img_cls.new.return_value = mock_img
+
+        def save_side_effect(buf, *args, **kwargs):
+            buf.write(b"fake_png_data")
+        mock_img.save.side_effect = save_side_effect
 
         tbl = Table(headers=[_cell("A")], rows=[])
         cfg = _make_cfg()
 
         from render.table import render_table
-        png_path = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
 
-        assert os.path.basename(png_path).startswith("table_")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
     @patch("render.table.ImageDraw")
     @patch("render.table.Image")
-    @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_rich_cell_with_bold_and_italic(self, mock_font, mock_img_cls, mock_draw_cls):
+    @patch("render.table.get_font")
+    def test_rich_cell_with_bold_and_italic(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """包含加粗和斜体 Span 的富文本单元格正确渲染。"""
+        mock_font = MagicMock()
+        mock_font.getbbox.return_value = (0, 0, 100, 20)
+        mock_get_font.return_value = mock_font
         mock_img = MagicMock()
         mock_img.resize.return_value = mock_img
         mock_img_cls.new.return_value = mock_img
+
+        def save_side_effect(buf, *args, **kwargs):
+            buf.write(b"fake_png_data")
+        mock_img.save.side_effect = save_side_effect
 
         tbl = Table(
             headers=[_cell("格式"), _cell("内容")],
@@ -88,19 +107,27 @@ class TestRenderTable:
         cfg = _make_cfg()
 
         from render.table import render_table
-        png_path = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
     @patch("render.table.ImageDraw")
     @patch("render.table.Image")
-    @patch("render.table.find_font_path", return_value=_FONT_PATH)
-    def test_all_span_formats(self, mock_font, mock_img_cls, mock_draw_cls):
+    @patch("render.table.get_font")
+    def test_all_span_formats(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """全部 5 种格式 Span 均能渲染。"""
+        mock_font = MagicMock()
+        mock_font.getbbox.return_value = (0, 0, 100, 20)
+        mock_get_font.return_value = mock_font
         mock_img = MagicMock()
         mock_img.resize.return_value = mock_img
         mock_img_cls.new.return_value = mock_img
+
+        def save_side_effect(buf, *args, **kwargs):
+            buf.write(b"fake_png_data")
+        mock_img.save.side_effect = save_side_effect
 
         tbl = Table(
             headers=[_cell("类型")],
@@ -117,9 +144,10 @@ class TestRenderTable:
         cfg = _make_cfg()
 
         from render.table import render_table
-        png_path = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
 

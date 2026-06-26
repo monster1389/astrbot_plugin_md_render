@@ -8,9 +8,8 @@ import logging
 
 from PIL import Image, ImageDraw, ImageFont
 
-from render.glyph import fallback_spans
 from render.parser import RichCell, Span, Table
-from render.utils import RenderConfig, build_temp_path, find_font_path
+from render.utils import RenderConfig, get_font
 
 logger = logging.getLogger(__name__)
 
@@ -33,27 +32,12 @@ _DPI = 2
 _MARGIN = 20     # 10px 外边距 @ 2x 内部分辨率
 _STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩放后）
 
-_font_cache: ImageFont.FreeTypeFont | None = None
-_font_path_cache: str | None = None
-
-
-def _get_font(data_dir: str) -> ImageFont.FreeTypeFont:
-    """获取缓存的字体，路径不变时复用。"""
-    global _font_cache, _font_path_cache
-    path = find_font_path(data_dir)
-    if path is None:
-        logger.warning("未找到 CJK 字体，表格中文可能显示为豆腐块")
-    if path != _font_path_cache:
-        _font_cache = ImageFont.truetype(path, _FONT_SIZE * _DPI) if path else ImageFont.load_default()
-        _font_path_cache = path
-    return _font_cache
-
 
 def render_table(
     table: Table,
     cfg: RenderConfig,
     data_dir: str,
-) -> str:
+) -> bytes:
     """渲染表格为 PNG 图片。
 
     Args:
@@ -67,40 +51,25 @@ def render_table(
     headers: list[RichCell] = table.headers
     rows: list[list[RichCell]] = table.rows
 
-    font_reg = _get_font(data_dir)
-    font_bold = font_reg
+    font_reg = get_font(data_dir, _FONT_SIZE * _DPI)
 
-    # 字形回退
     all_rows: list[list[RichCell]] = []
     if headers:
         all_rows.append(headers)
     all_rows.extend(rows)
-    fallback_spans(all_rows, cfg.glyph_mapping, font_reg)
 
     n_rows = len(all_rows)
     n_cols = max((len(r) for r in all_rows), default=1)
 
-    # 列宽
-    col_widths: list[int] = []
-    for c in range(n_cols):
-        max_w = 0
-        for r in range(n_rows):
-            if c < len(all_rows[r]):
-                w = _cell_w(all_rows[r][c].spans, font_reg, font_bold)
-                if w > max_w:
-                    max_w = w
-        col_widths.append(max_w + _PAD_X * 2 * _DPI)
-
-    # 行高
-    row_heights: list[int] = []
+    # 一次遍历同时算列宽和行高
+    col_widths = [0] * n_cols
+    row_heights = [0] * n_rows
     for r in range(n_rows):
-        max_h = 0
         for c in range(n_cols):
             if c < len(all_rows[r]):
-                _, h = _cell_size(all_rows[r][c].spans, font_reg, font_bold)
-                if h > max_h:
-                    max_h = h
-        row_heights.append(max_h + _PAD_Y * 2 * _DPI)
+                w, h = _cell_size(all_rows[r][c].spans, font_reg)
+                col_widths[c] = max(col_widths[c], w + _PAD_X * 2 * _DPI)
+                row_heights[r] = max(row_heights[r], h + _PAD_Y * 2 * _DPI)
 
     total_w = sum(col_widths)
     total_h = sum(row_heights)
@@ -126,11 +95,11 @@ def render_table(
             bg = _RGB_HEADER_BG if is_header else _RGB_BG
             draw.rectangle([x + 1, y + 1, x + w - 1, y + rh - 1], fill=bg)
 
-            _, text_h = _cell_size(cell.spans, font_reg, font_bold)
+            _, text_h = _cell_size(cell.spans, font_reg)
             baseline = y + (rh - text_h) // 2
             cursor = x + _PAD_X * _DPI
             for span in cell.spans:
-                font = font_bold if span.bold else font_reg
+                font = font_reg
                 color = _span_color(span)
 
                 draw.text((cursor, baseline), span.text, fill=color, font=font)
@@ -170,10 +139,10 @@ def render_table(
 
     img = img.resize((canvas_w // _DPI, canvas_h // _DPI), Image.LANCZOS)
 
-    png_path = build_temp_path(data_dir, "table", ".png")
-    img.save(png_path, "PNG")
-
-    return png_path
+    from io import BytesIO
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
 
 
 def _span_color(span: Span) -> tuple[int, int, int]:
@@ -194,14 +163,12 @@ def _span_color(span: Span) -> tuple[int, int, int]:
 def _cell_size(
     spans: list[Span],
     font_reg: ImageFont.FreeTypeFont,
-    font_bold: ImageFont.FreeTypeFont,
 ) -> tuple[int, int]:
     """计算 Span 组合的总宽高。
 
     Args:
         spans: Span 列表。
-        font_reg: 常规字体。
-        font_bold: 粗体字体。
+        font_reg: 字体。
 
     Returns:
         (总宽度, 最大行高)。
@@ -209,18 +176,8 @@ def _cell_size(
     tw = 0
     mh = 0
     for s in spans:
-        f = font_bold if s.bold else font_reg
+        f = font_reg
         bbox = f.getbbox(s.text)
         tw += bbox[2] - bbox[0]
         mh = max(mh, bbox[3] - bbox[1])
     return tw, mh
-
-
-def _cell_w(
-    spans: list[Span],
-    font_reg: ImageFont.FreeTypeFont,
-    font_bold: ImageFont.FreeTypeFont,
-) -> int:
-    """计算 Span 组合的总宽度（不含行高）。"""
-    w, _ = _cell_size(spans, font_reg, font_bold)
-    return w
