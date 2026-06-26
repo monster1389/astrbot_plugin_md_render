@@ -1,11 +1,47 @@
 """配置读取、颜色解析、字体发现、临时路径构建。"""
 from __future__ import annotations
 
+import logging
 import os
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 
+from PIL import ImageFont
+
 from render.glyph import load_glyph_mapping
+
+logger = logging.getLogger(__name__)
+
+
+_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+_font_path: str | None = None
+_lock = threading.Lock()
+
+
+def get_font(data_dir: str, size: int) -> ImageFont.FreeTypeFont:
+    """获取缓存的字体，按字号缓存，路径变更时全清。线程安全。
+
+    Args:
+        data_dir: 插件数据目录路径。
+        size: 字号（像素）。
+
+    Returns:
+        PIL 字体对象。字体不可用时回退为默认位图字体。
+    """
+    global _font_cache, _font_path
+    path = find_font_path(data_dir)
+    with _lock:
+        if path != _font_path:
+            _font_cache.clear()
+            _font_path = path
+        if size not in _font_cache:
+            if path is None:
+                logger.warning("未找到中文字体，将使用默认位图字体，中文将显示为豆腐块")
+                _font_cache[size] = ImageFont.load_default()
+            else:
+                _font_cache[size] = ImageFont.truetype(path, size)
+        return _font_cache[size]
 
 
 @dataclass(frozen=True)
