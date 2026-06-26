@@ -84,13 +84,12 @@ RespondStage 发送最终 chain
 | 模块 | 职责 |
 |------|------|
 | `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider |
-| `render/code.py` | pygments → pillow 渲染代码块为 PNG，同时写 .md 围栏文件 |
-| `render/table.py` | Pillow 手绘表格为 PNG，支持格内加粗/斜体/删除线/行内代码/链接混排 |
-| `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级）为 PNG |
-| `render/glyph.py` | 字形回退：检测字符是否在字体中，按映射表替换缺失字形 |
-| `render/chain.py` | 按配置模式将解析结果组装为消息链，路由到各渲染模块 |
+| `render/code.py` | pygments → pillow 渲染代码块，返回 PNG bytes + md 文本 |
+| `render/table.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
+| `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
+| `render/chain.py` | async 并发组装，asyncio.gather 收集渲染结果，按原序构建消息链 |
 | `render/cleaner.py` | 周期性扫描 temp/，按配置存活时长删过期临时文件 |
-| `render/utils.py` | `RenderConfig` dataclass + 配置加载/颜色解析/字体发现/临时路径工具 |
+| `render/utils.py` | `RenderConfig` dataclass + get_font/配置加载/颜色解析/字体发现/临时路径 |
 
 ### 关键 API
 
@@ -110,8 +109,7 @@ RespondStage 发送最终 chain
 - 表达式：不处理 / 渲染图像 / 渲染且保留原文
 - 分隔线：不处理 / 切分
 - 字体颜色、背景颜色：多种预设
-- 字形映射：JSON 映射表，缺字时替换为相似字符
-- 临时文件存活（分钟）：0=即时删除，-1=永久保留
+- 临时文件存活（分钟）：0=即时删除（默认），-1=永久保留
 
 ### 设计文档
 
