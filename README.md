@@ -31,6 +31,4 @@
 插件首次启动会自动下载 [更纱等宽黑体](https://github.com/be5invis/Sarasa-Gothic)（Sarasa Mono SC），中英文 2:1 严格等宽，约 8 MB。下载不阻塞启动，期间代码块可能无中文字体。
 
 
-### 分隔线切分
 
-`分隔线: 切分` 会将 `---` 作为消息断点插入 chain，配合 [astrbot_plugin_splitter](https://github.com/AstrBotDevs/astrbot_plugin_splitter) 可实现智能分段。需同时安装该插件。
