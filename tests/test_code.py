@@ -1,5 +1,4 @@
 """代码块渲染测试。"""
-import os
 from unittest.mock import patch
 
 from render.code import render_code
@@ -25,47 +24,34 @@ def _make_cfg(**overrides):
 class TestRenderCode:
     @patch("render.code.find_font_path", return_value="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
     def test_renders_python_code(self, mock_load):
-        """Python 代码块渲染返回 png 和 txt 文件路径。"""
+        """Python 代码块渲染返回 bytes 和 md 文本。"""
         cb = CodeBlock(lang="python", code="def f(): pass")
         cfg = _make_cfg()
-        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
+        png_bytes, md_text = render_code(cb, cfg, data_dir="/tmp")
 
-        assert png_path.endswith(".png")
-        assert md_path.endswith(".md")
-        assert os.path.basename(png_path).startswith("code_")
-        assert os.path.basename(md_path).startswith("code_")
-
-        # md 文件包含 fenced code block
-        with open(md_path, "r") as f:
-            content = f.read()
-            assert "```python" in content
-            assert "def f(): pass" in content
-
-        # png 文件存在且非空
-        assert os.path.getsize(png_path) > 0
-
-        # 清理
-        os.remove(png_path)
-        os.remove(md_path)
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
+        assert "```python" in md_text
+        assert "def f(): pass" in md_text
 
     @patch("render.code.find_font_path", return_value="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
     def test_code_without_lang(self, mock_load):
         """无语言标注的代码块仍可渲染。"""
         cb = CodeBlock(lang="", code="plain text")
         cfg = _make_cfg()
-        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
+        png_bytes, md_text = render_code(cb, cfg, data_dir="/tmp")
 
-        assert os.path.getsize(png_path) > 0
-        os.remove(png_path)
-        os.remove(md_path)
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
+        assert "```" in md_text
 
     @patch("render.code.find_font_path", return_value="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
     def test_empty_code(self, mock_load):
         """空代码块也能渲染。"""
         cb = CodeBlock(lang="python", code="")
         cfg = _make_cfg()
-        png_path, md_path = render_code(cb, cfg, data_dir="/tmp")
+        png_bytes, md_text = render_code(cb, cfg, data_dir="/tmp")
 
-        assert os.path.getsize(png_path) > 0
-        os.remove(png_path)
-        os.remove(md_path)
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
+        assert "```python" in md_text
