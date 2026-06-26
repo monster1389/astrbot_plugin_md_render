@@ -4,6 +4,8 @@
 
 ## 效果展示
 
+![聊天效果](docs/demo/chat.jpg)
+
 | 代码块 | 表格（格内格式） |
 |--------|------------------|
 | ![code](docs/demo/code.png) | ![table](docs/demo/table.png) |
