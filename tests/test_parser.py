@@ -83,6 +83,42 @@ class TestExpr:
         assert len(block_exprs) == 1
         assert "\\int" in block_exprs[0].expr
 
+    def test_unpaired_dollar_currency(self):
+        """孤 $ 货币符号不视为表达式。"""
+        text = "首月 $5、之后 $10。"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert len(inline_exprs) == 0
+        plain_text = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "$5" in plain_text
+        assert "$10" in plain_text
+
+    def test_mixed_currency_and_expr(self):
+        """货币 $ 与表达式 $...$ 混合时只匹配后者。"""
+        text = "$5，不打折 $E=mc^2$"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert len(inline_exprs) == 1
+        assert inline_exprs[0].expr == "E=mc^2"
+        plain_text = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "$5" in plain_text
+
+    def test_single_char_expr(self):
+        """单字符行内表达式 $x$。"""
+        text = "$x$"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert len(inline_exprs) == 1
+        assert inline_exprs[0].expr == "x"
+
+    def test_numeric_expr(self):
+        """数字开头表达式 $1+2=3$。"""
+        text = "$1+2=3$"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert len(inline_exprs) == 1
+        assert inline_exprs[0].expr == "1+2=3"
+
 
 class TestDivider:
     def test_divider(self):
