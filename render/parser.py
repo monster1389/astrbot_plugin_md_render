@@ -275,15 +275,32 @@ def extract_inline_content(
         if not part:
             continue
 
-        # 在普通文本中拆分 $...$ 行内表达式
-        dollar_parts = re.split(r"(?<!\\)\$", part)
-        for i, p in enumerate(dollar_parts):
-            if i % 2 == 1:
-                if p.strip():
-                    result.append(InlineExpr(expr=p.strip()))
+        # 在普通文本中查找闭合 $...$ 对，校验后替换为占位符
+        inline_exprs: dict[int, str] = {}
+        idx = 0
+
+        def _replace(m: re.Match) -> str:
+            nonlocal idx
+            expr = m.group(1)
+            if _is_valid_inline_expr(expr):
+                inline_exprs[idx] = expr
+                placeholder = f"\x02INLINEEXPR{idx}\x02"
+                idx += 1
+                return placeholder
+            return m.group(0)
+
+        processed = _INLINE_EXPR_RE.sub(_replace, part)
+
+        # 按占位符切分，交替组装 Segment / InlineExpr
+        inline_parts = _INLINE_PLACEHOLDER_RE.split(processed)
+        for sub_i, sub_part in enumerate(inline_parts):
+            if sub_i % 2 == 1 and sub_part.isdigit():
+                expr_idx = int(sub_part)
+                if expr_idx in inline_exprs:
+                    result.append(InlineExpr(expr=inline_exprs[expr_idx]))
             else:
-                if p:
-                    result.append(Segment(text=p))
+                if sub_part:
+                    result.append(Segment(text=sub_part))
 
     return result
 
