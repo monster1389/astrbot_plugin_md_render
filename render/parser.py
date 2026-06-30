@@ -15,6 +15,17 @@ _MATH_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
 _MATH_PLACEHOLDER_PREFIX = "\x01MATHBLOCK"
 _MATH_PLACEHOLDER_RE = re.compile(r"\x01MATHBLOCK(\d+)\x01")
 
+# 匹配闭合的 $...$ 对：内容 1-100 非 $ 非换行字符，首尾非空格
+_INLINE_EXPR_RE = re.compile(
+    r"(?<!\\)\$"
+    r"([^\s$]"
+    r"(?:[^$\n]{0,100}"
+    r"[^\s$])?)"
+    r"\$"
+)
+# 用于拆分行内表达式占位符
+_INLINE_PLACEHOLDER_RE = re.compile(r"\x02INLINEEXPR(\d+)\x02")
+
 
 @dataclass
 class Segment:
@@ -204,6 +215,27 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
                 rows.append(row)
         j += 1
     return Table(headers=headers, rows=rows), j + 1
+
+
+def _is_valid_inline_expr(content: str) -> bool:
+    """检查 $...$ 内容是否像 LaTeX 表达式而非自然语言。
+
+    Args:
+        content: $...$ 之间的内容。
+
+    Returns:
+        True 表示应作为表达式渲染。
+    """
+    if not content or not content.strip():
+        return False
+    if len(content) > 100:
+        return False
+    if "\n" in content:
+        return False
+    for c in content:
+        if "一" <= c <= "鿿":
+            return False
+    return True
 
 
 def extract_inline_content(
