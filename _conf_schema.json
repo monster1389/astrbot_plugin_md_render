@@ -6,45 +6,51 @@
     "items": {
       "代码块": {
         "type": "string",
-        "description": "代码块处理",
+        "description": "代码块",
+        "hint": "将围栏代码块渲染为图片，'仅md文件' 不渲染只发 .md。",
         "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
         "default": "渲染且md文件"
       },
       "表格": {
         "type": "string",
-        "description": "表格处理",
+        "description": "表格",
+        "hint": "将 Markdown 表格渲染为图片，支持格内加粗、斜体、删除线、行内代码、链接。",
         "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
         "default": "渲染图像"
       },
       "表达式": {
         "type": "string",
-        "description": "数学表达式处理",
+        "description": "数学表达式",
+        "hint": "将 $...$ 行内和 $$...$$ 块级 LaTeX 表达式渲染为图片。",
         "options": ["不处理", "渲染图像", "渲染且保留原文"],
         "default": "渲染图像"
       },
       "分隔线": {
         "type": "string",
-        "description": "分隔线 --- 处理",
+        "description": "分隔线",
+        "hint": "对 --- 分隔线的处理方式。'切分' 可供分片插件使用。",
         "options": ["不处理", "切分"],
         "default": "不处理"
       },
       "字体颜色": {
         "type": "string",
-        "description": "渲染字体颜色",
+        "description": "字体颜色",
+        "hint": "代码块和表格渲染的文字颜色。",
         "options": ["#9CDCFE (浅蓝)", "#ABB2BF (material 默认)", "#D4D4D4 (浅灰)", "#FFFFFF (纯白)"],
         "default": "#9CDCFE (浅蓝)"
       },
       "背景颜色": {
         "type": "string",
-        "description": "渲染背景颜色",
+        "description": "背景颜色",
+        "hint": "代码块和表格渲染的背景颜色。",
         "options": ["#1E1E1E (VS Code 深色)", "#2D2D2D (浅深色)", "#000000 (纯黑)", "#FFFFFF (纯白)"],
         "default": "#1E1E1E (VS Code 深色)"
       },
       "临时文件存活": {
         "type": "int",
-        "description": "临时文件存活时长（分钟）",
-        "default": 0,
-        "hint": "0=即时删除, -1=永久保留"
+        "description": "临时文件存活",
+        "hint": "渲染产物保留时长（分钟）。0=即时删除，-1=永久保留。",
+        "default": 0
       }
     }
   },
@@ -53,16 +59,16 @@
     "description": "清洗",
     "hint": "去除未渲染的 Markdown 格式标记，让纯文本消息更干净。",
     "items": {
-      "加粗": { "type": "bool", "description": "去除 ** 标记", "default": true },
-      "斜体": { "type": "bool", "description": "去除 * 标记", "default": true },
-      "删除线": { "type": "bool", "description": "去除 ~~ 标记", "default": true },
-      "行内代码": { "type": "bool", "description": "去除 ` 标记", "default": true },
-      "链接": { "type": "bool", "description": "去除 [文字](url) 转为 文字 (url) 格式", "default": true },
-      "标题": { "type": "bool", "description": "去除行首 # 标记", "default": true },
-      "列表标记（无序）": { "type": "bool", "description": "去除 - 无序列表前缀标记", "default": true },
-      "列表标记（有序）": { "type": "bool", "description": "去除 1. 有序列表前缀标记", "default": true },
-      "引用": { "type": "bool", "description": "去除 > 引用标记", "default": true },
-      "图片": { "type": "bool", "description": "去除 ![alt](url) 语法，转为 alt (url) 格式", "default": true }
+      "加粗": { "type": "bool", "description": "加粗", "hint": "去除 **text** 标记，保留文本。", "default": true },
+      "斜体": { "type": "bool", "description": "斜体", "hint": "去除 *text* 标记，保留文本。", "default": true },
+      "删除线": { "type": "bool", "description": "删除线", "hint": "去除 ~~text~~ 标记，保留文本。", "default": true },
+      "行内代码": { "type": "bool", "description": "行内代码", "hint": "去除 `text` 标记，保留文本。", "default": true },
+      "链接": { "type": "bool", "description": "链接", "hint": "将 [text](url) 转为 'text (url)' 格式。", "default": true },
+      "标题": { "type": "bool", "description": "标题", "hint": "去除行首 # 标记，保留文本。", "default": true },
+      "列表标记（无序）": { "type": "bool", "description": "无序列表", "hint": "去除 - 无序列表前缀标记。", "default": true },
+      "列表标记（有序）": { "type": "bool", "description": "有序列表", "hint": "去除 1. 有序列表前缀标记。", "default": true },
+      "引用": { "type": "bool", "description": "引用", "hint": "去除 > 引用前缀标记。", "default": true },
+      "图片": { "type": "bool", "description": "图片", "hint": "将 ![alt](url) 转为 'alt (url)' 格式。", "default": true }
     }
   }
 }
