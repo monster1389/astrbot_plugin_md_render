@@ -255,3 +255,54 @@ class TestBuildChain:
         assert isinstance(img, Image)
         assert hasattr(img, "data") and img.data == b"fake_png_data"
         assert not hasattr(img, "file")
+
+
+class TestBuildChainWithCleaning:
+    def test_cleaning_applied_to_segment_text(self):
+        """清洗在 Segment 文本上执行，去除 markdown 格式。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="**粗体** 普通 *斜体*")]
+        cfg = _make_cfg()
+        clean_cfg = _make_clean_cfg()
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "粗体 普通 斜体"
+
+    def test_cleaning_skipped_when_none(self):
+        """clean_cfg=None 时不清洗，原样保留。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="**粗体**")]
+        cfg = _make_cfg()
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        assert result[0].text == "**粗体**"
+
+    def test_cleaning_all_off_preserves_text(self):
+        """清洗全关时原样保留。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="**粗体**")]
+        cfg = _make_cfg()
+        clean_cfg = _make_clean_cfg(bold=False, italic=False, strikethrough=False,
+                                     inline_code=False, link=False, heading=False,
+                                     list_unordered=False, list_ordered=False,
+                                     blockquote=False, image=False)
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert result[0].text == "**粗体**"
+
+    @patch("render.chain.render_code")
+    def test_code_render_unaffected_by_cleaning(self, mock_render):
+        """代码块渲染不受清洗影响，只有 Segment 被清洗。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = (b"fake_png", "```py\nx=1\n```")
+        segments = [CodeBlock(lang="py", code="x=1"), Segment(text="**尾注**")]
+        cfg = _make_cfg(code_mode="渲染图像")
+        clean_cfg = _make_clean_cfg()
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 2
+        assert isinstance(result[0], Image)  # 代码块正常渲染
+        assert isinstance(result[1], Plain)
+        assert result[1].text == "尾注"  # Segment 被清洗
