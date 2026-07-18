@@ -32,5 +32,22 @@
 
 插件首次启动会自动下载 [更纱等宽黑体](https://github.com/be5invis/Sarasa-Gothic)（Sarasa Mono SC），中英文 2:1 严格等宽，约 8 MB。下载不阻塞启动，期间代码块可能无中文字体。
 
+### Markdown 格式清洗
 
+插件会在渲染代码块/表格/表达式后，对剩余文本中的 Markdown 格式标记进行清洗。每种格式可独立开关，默认全部开启。
+
+| 格式 | 语法 | 清洗后 |
+|------|------|--------|
+| 加粗 | `**text**` | `text` |
+| 斜体 | `*text*` | `text` |
+| 删除线 | `~~text~~` | `text` |
+| 行内代码 | `` `text` `` | `text` |
+| 链接 | `[text](url)` | `text (url)` |
+| 标题 | `# text` | `text` |
+| 无序列表 | `- item` | `item` |
+| 有序列表 | `1. item` | `item` |
+| 引用 | `> text` | `text` |
+| 图片 | `![alt](url)` | `alt (url)` |
+
+清洗基于 markdown-it-py 的 CommonMark 语法解析，颜表情如 `(￣▽￣*)` 中的 `*` 不会被误判为斜体。
 
