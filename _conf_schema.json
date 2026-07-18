@@ -1,7 +1,8 @@
 {
   "渲染": {
     "type": "object",
-    "description": "Markdown 元素渲染为图片",
+    "description": "渲染",
+    "hint": "将 Markdown 代码块、表格、数学表达式渲染为图片。",
     "items": {
       "代码块": {
         "type": "string",
@@ -49,7 +50,8 @@
   },
   "清洗": {
     "type": "object",
-    "description": "去除未渲染的 Markdown 格式标记",
+    "description": "清洗",
+    "hint": "去除未渲染的 Markdown 格式标记，让纯文本消息更干净。",
     "items": {
       "加粗": { "type": "bool", "description": "去除 ** 标记", "default": true },
       "斜体": { "type": "bool", "description": "去除 * 标记", "default": true },
