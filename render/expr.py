@@ -13,6 +13,10 @@ from pillowlatex import GetLaTeXObjs, RenderLaTeX
 
 from render.utils import RenderConfig
 
+# VS Code dark theme 配色
+_FONT_COLOR = "#9CDCFE"
+_BG_COLOR = "#1E1E1E"
+
 
 def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> bytes:
     """核心渲染逻辑：LaTeX 源码 → 合成背景色 PNG。
@@ -35,8 +39,8 @@ def _render_latex(latex_src: str, cfg: RenderConfig, data_dir: str) -> bytes:
     w, h = render_img.size
     pad = 10
 
-    result = Image.new("RGB", (w + pad * 2, h + pad * 2), cfg.bg_color)
-    text_layer = Image.new("RGB", render_img.size, cfg.font_color)
+    result = Image.new("RGB", (w + pad * 2, h + pad * 2), _BG_COLOR)
+    text_layer = Image.new("RGB", render_img.size, _FONT_COLOR)
     result.paste(text_layer, (pad, pad), render_img.split()[3])
 
     buf = BytesIO()

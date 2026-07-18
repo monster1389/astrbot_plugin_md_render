@@ -55,16 +55,12 @@ class RenderConfig:
         table_mode: 表格处理模式。
         expr_mode: 数学表达式处理模式。
         divider_mode: 水平分割线处理模式。
-        font_color: 字体颜色（纯 hex）。
-        bg_color: 背景颜色（纯 hex）。
         temp_ttl: 临时文件存活分钟数。
     """
     code_mode: str
     table_mode: str
     expr_mode: str
     divider_mode: str
-    font_color: str
-    bg_color: str
     temp_ttl: int
 
 
@@ -120,8 +116,6 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
         table_mode=render_raw.get("表格", "渲染图像"),
         expr_mode=render_raw.get("表达式", "渲染图像"),
         divider_mode=render_raw.get("分隔线", "不处理"),
-        font_color=parse_color(render_raw.get("字体颜色", "#9CDCFE (浅蓝)")),
-        bg_color=parse_color(render_raw.get("背景颜色", "#1E1E1E (VS Code 深色)")),
         temp_ttl=int(render_raw.get("临时文件存活", 0)),
     )
 
@@ -139,18 +133,6 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
     )
 
     return render_cfg, clean_cfg
-
-
-def parse_color(value: str) -> str:
-    """从颜色配置值中提取纯 hex 颜色。
-
-    Args:
-        value: 颜色值，如 '#9CDCFE (浅蓝)' 或 '#1E1E1E'。
-
-    Returns:
-        纯 hex 颜色字符串。
-    """
-    return value.split(" ")[0]
 
 
 def find_font_path(data_dir: str | None = None) -> str | None:

@@ -11,8 +11,6 @@ def _make_cfg(**overrides):
         "table_mode": "渲染图像",
         "expr_mode": "渲染图像",
         "divider_mode": "不处理",
-        "font_color": "#9CDCFE",
-        "bg_color": "#1E1E1E",
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))

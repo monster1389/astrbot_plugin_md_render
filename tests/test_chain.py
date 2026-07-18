@@ -15,8 +15,6 @@ def _make_cfg(**overrides):
         "table_mode": "不处理",
         "expr_mode": "不处理",
         "divider_mode": "不处理",
-        "font_color": "#000",
-        "bg_color": "#FFF",
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))
@@ -146,7 +144,6 @@ class TestBuildChain:
         cfg = RenderConfig(
             code_mode="渲染图像", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
-            font_color="#000", bg_color="#FFF",
             temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
@@ -166,7 +163,6 @@ class TestBuildChain:
         cfg = RenderConfig(
             code_mode="渲染且保留原文", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
-            font_color="#000", bg_color="#FFF",
             temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1")]
