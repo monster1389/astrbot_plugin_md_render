@@ -82,6 +82,7 @@ class MdRenderPlugin(Star):
         super().__init__(context)
         self.config: dict[str, Any] = config or {}
         self.cfg = None
+        self.clean_cfg = None
 
     async def initialize(self):
         """插件初始化。"""
@@ -93,7 +94,7 @@ class MdRenderPlugin(Star):
         font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
         if not os.path.exists(font_path):
             asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
-        self.cfg = load_config(self.config)
+        self.cfg, self.clean_cfg = load_config(self.config)
         _start_cleaner(str(data_dir), self.cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
 
