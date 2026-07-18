@@ -64,6 +64,34 @@ class RenderConfig:
     temp_ttl: int
 
 
+@dataclass(frozen=True)
+class CleanConfig:
+    """Markdown 格式清洗配置。
+
+    Attributes:
+        bold: 去除 ** 加粗标记。
+        italic: 去除 * 斜体标记。
+        strikethrough: 去除 ~~ 删除线标记。
+        inline_code: 去除 ` 行内代码标记。
+        link: 去除 [文字](url) 转为 文字 (url)。
+        heading: 去除行首 # 标题标记。
+        list_unordered: 去除 - 无序列表标记。
+        list_ordered: 去除 1. 有序列表标记。
+        blockquote: 去除 > 引用标记。
+        image: 去除 ![alt](url) 转为 alt (url)。
+    """
+    bold: bool = True
+    italic: bool = True
+    strikethrough: bool = True
+    inline_code: bool = True
+    link: bool = True
+    heading: bool = True
+    list_unordered: bool = True
+    list_ordered: bool = True
+    blockquote: bool = True
+    image: bool = True
+
+
 def load_config(raw: dict) -> RenderConfig:
     """从 AstrBot 原始配置字典构造 RenderConfig。
 
