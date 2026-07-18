@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
@@ -233,3 +235,72 @@ def _walk_inline(children: list[Token], cfg: CleanConfig) -> str:
                 parts.append(t.markup)
 
     return "".join(parts)
+
+
+def clean_code_block(text: str) -> str:
+    """去除代码块围栏标记，保留代码文本。
+
+    Args:
+        text: 原始 markdown 代码块文本（含 ``` 围栏）。
+
+    Returns:
+        去除首尾围栏行后的代码内容。
+    """
+    if not text:
+        return ""
+    t = text.strip()
+    # 去掉开头 ```lang 行
+    t = re.sub(r"^```[^\n]*\n", "", t)
+    # 去掉结尾 ``` 行
+    t = re.sub(r"\n```\s*$", "", t)
+    # 处理只有 ``` 开头无内容的边界
+    t = re.sub(r"^```\s*$", "", t)
+    return t
+
+
+def clean_table(text: str) -> str:
+    """清洗 markdown 表格：去掉分隔行，去掉每行首尾 | 及空白。
+
+    Args:
+        text: 原始 markdown 表格文本。
+
+    Returns:
+        精简竖线分隔的文本。
+    """
+    if not text:
+        return ""
+    lines = text.strip().split("\n")
+    result: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        # 跳过分隔行（如 |---|:---:|---|）
+        if re.match(r"^\|[\s\-:]+(\|[\s\-:]+)*\|$", stripped):
+            continue
+        # 去掉首尾 | 及紧邻空格
+        if stripped.startswith("|"):
+            stripped = stripped[1:]
+        if stripped.endswith("|"):
+            stripped = stripped[:-1]
+        result.append(stripped.strip())
+    return "\n".join(result)
+
+
+def clean_expr(text: str) -> str:
+    """去除 $$ 和 $ 定界符，保留表达式文本。
+
+    Args:
+        text: 含 $ 或 $$ 的数学表达式文本。
+
+    Returns:
+        去除定界符后的纯 LaTeX 文本。
+    """
+    if not text:
+        return ""
+    t = text.strip()
+    # 先处理 $$...$$（块级）
+    if t.startswith("$$") and t.endswith("$$"):
+        t = t[2:-2].strip()
+    # 再处理 $...$（行内）
+    elif t.startswith("$") and t.endswith("$"):
+        t = t[1:-1].strip()
+    return t

@@ -1,7 +1,7 @@
 """md_cleaner 测试。"""
 from __future__ import annotations
 
-from render.clean.md_cleaner import clean_markdown
+from render.clean.md_cleaner import clean_code_block, clean_expr, clean_markdown, clean_table
 from render.utils import CleanConfig
 
 
@@ -107,6 +107,60 @@ class TestPartialClean:
             bold=False, italic=False, strikethrough=False,
             inline_code=False, link=False,
         )) == text
+
+
+class TestCleanCodeBlock:
+    def test_strips_fence_with_lang(self):
+        text = "```python\nprint('hello')\n```"
+        assert clean_code_block(text) == "print('hello')"
+
+    def test_strips_fence_without_lang(self):
+        text = "```\nplain text\n```"
+        assert clean_code_block(text) == "plain text"
+
+    def test_no_fence_passthrough(self):
+        assert clean_code_block("普通代码") == "普通代码"
+
+    def test_empty(self):
+        assert clean_code_block("") == ""
+
+    def test_multiline_code(self):
+        text = "```bash\ndocker pull a\n# comment\ndocker run b\n```"
+        assert clean_code_block(text) == "docker pull a\n# comment\ndocker run b"
+
+
+class TestCleanTable:
+    def test_simple_table(self):
+        text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        assert clean_table(text) == "A | B\n1 | 2"
+
+    def test_three_column_table(self):
+        text = "| 名称 | 版本 | 说明 |\n|------|------|------|\n| A | v1 | 测试 |\n| B | v2 | 正式 |"
+        assert clean_table(text) == "名称 | 版本 | 说明\nA | v1 | 测试\nB | v2 | 正式"
+
+    def test_no_separator_passthrough(self):
+        assert clean_table("| A | B |\n| 1 | 2 |") == "A | B\n1 | 2"
+
+    def test_empty(self):
+        assert clean_table("") == ""
+
+
+class TestCleanExpr:
+    def test_inline_expr(self):
+        assert clean_expr("$E=mc^2$") == "E=mc^2"
+
+    def test_block_expr(self):
+        assert clean_expr("$$\n\\int_0^\\infty e^{-x} dx = 1\n$$") == "\\int_0^\\infty e^{-x} dx = 1"
+
+    def test_block_expr_inline(self):
+        """$$ 无换行的紧凑块级表达式。"""
+        assert clean_expr("$$x^2 + y^2 = z^2$$") == "x^2 + y^2 = z^2"
+
+    def test_no_delimiter_passthrough(self):
+        assert clean_expr("E=mc^2") == "E=mc^2"
+
+    def test_empty(self):
+        assert clean_expr("") == ""
 
 
 class TestEdgeCases:
