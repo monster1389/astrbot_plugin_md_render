@@ -21,8 +21,11 @@ def _make_cfg(**overrides):
 
 
 def _make_clean_cfg(**overrides):
-    """构造测试用 CleanConfig。"""
-    defaults = {k: True for k in vars(CleanConfig())}
+    """构造测试用 CleanConfig，经典字段默认 True，code/table/expr 默认 False。"""
+    defaults = vars(CleanConfig()).copy()
+    for k in defaults:
+        if k not in ("code", "table", "expr"):
+            defaults[k] = True
     defaults.update(overrides)
     return CleanConfig(**defaults)
 
@@ -302,3 +305,76 @@ class TestBuildChainWithCleaning:
         assert isinstance(result[0], Image)  # 代码块正常渲染
         assert isinstance(result[1], Plain)
         assert result[1].text == "尾注"  # Segment 被清洗
+
+    def test_clean_code_block_on_unprocessed(self):
+        """代码块清洗：不处理模式下去除 fence 标记。"""
+        from render.chain import build_chain
+
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="不处理")
+        clean_cfg = _make_clean_cfg(code=True)
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "x=1"
+
+    def test_clean_code_off_unprocessed_preserves_fence(self):
+        """默认关：代码块原文保留 fence。"""
+        from render.chain import build_chain
+
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="不处理")
+        clean_cfg = _make_clean_cfg()  # code=False by default
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert "```py" in result[0].text
+
+    @patch("render.chain.render_code")
+    def test_clean_code_with_keep_original(self, mock_render):
+        """渲染且保留原文 + 清洗：原文去 fence，图片正常。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = (b"fake_png", "```py\nx=1\n```")
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="渲染且保留原文")
+        clean_cfg = _make_clean_cfg(code=True)
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 2
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "x=1"
+        assert isinstance(result[1], Image)
+
+    def test_clean_table_on_unprocessed(self):
+        """表格清洗：不处理模式下精简表格格式。"""
+        from render.chain import build_chain
+
+        tbl = Table(
+            headers=[
+                RichCell(spans=[Span(text="名称")]),
+                RichCell(spans=[Span(text="版本")]),
+            ],
+            rows=[[
+                RichCell(spans=[Span(text="A")]),
+                RichCell(spans=[Span(text="v1")]),
+            ]],
+        )
+        segments = [tbl]
+        cfg = _make_cfg(table_mode="不处理")
+        clean_cfg = _make_clean_cfg(table=True)
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert "名称 | 版本" in result[0].text
+        assert "A | v1" in result[0].text
+        assert "|---" not in result[0].text
+
+    def test_clean_expr_on_unprocessed(self):
+        """表达式清洗：不处理模式下去除 $ 定界符。"""
+        from render.chain import build_chain
+
+        segments = [InlineExpr(expr="E=mc^2")]
+        cfg = _make_cfg(expr_mode="不处理")
+        clean_cfg = _make_clean_cfg(expr=True)
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "E=mc^2"
