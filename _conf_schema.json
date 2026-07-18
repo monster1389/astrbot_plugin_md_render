@@ -54,7 +54,10 @@
       "列表标记（无序）": { "type": "bool", "description": "无序列表", "hint": "去除 - 无序列表前缀标记。", "default": true },
       "列表标记（有序）": { "type": "bool", "description": "有序列表", "hint": "去除 1. 有序列表前缀标记。", "default": true },
       "引用": { "type": "bool", "description": "引用", "hint": "去除 > 引用前缀标记。", "default": true },
-      "图片": { "type": "bool", "description": "图片", "hint": "将 ![alt](url) 转为 'alt (url)' 格式。", "default": true }
+      "图片": { "type": "bool", "description": "图片", "hint": "将 ![alt](url) 转为 'alt (url)' 格式。", "default": true },
+      "代码块": { "type": "bool", "description": "代码块", "hint": "去除 ``` 围栏标记，保留代码文本。", "default": false },
+      "表格": { "type": "bool", "description": "表格", "hint": "去除表头分隔行，竖线保留为列分隔符。", "default": false },
+      "表达式": { "type": "bool", "description": "表达式", "hint": "去除 $ 和 $$ 定界符，保留公式文本。", "default": false }
     }
   }
 }

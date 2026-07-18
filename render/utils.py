@@ -79,6 +79,9 @@ class CleanConfig:
         list_ordered: 去除 1. 有序列表标记。
         blockquote: 去除 > 引用标记。
         image: 去除 ![alt](url) 转为 alt (url)。
+        code: 去除 ``` 围栏标记，保留代码文本。
+        table: 去除表头分隔行及首尾 |，保留列分隔符。
+        expr: 去除 $ 和 $$ 定界符，保留公式文本。
     """
     bold: bool = True
     italic: bool = True
@@ -90,6 +93,9 @@ class CleanConfig:
     list_ordered: bool = True
     blockquote: bool = True
     image: bool = True
+    code: bool = False
+    table: bool = False
+    expr: bool = False
 
 
 def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
@@ -130,6 +136,9 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
         list_ordered=bool(clean_raw.get("列表标记（有序）", True)),
         blockquote=bool(clean_raw.get("引用", True)),
         image=bool(clean_raw.get("图片", True)),
+        code=bool(clean_raw.get("代码块", False)),
+        table=bool(clean_raw.get("表格", False)),
+        expr=bool(clean_raw.get("表达式", False)),
     )
 
     return render_cfg, clean_cfg
