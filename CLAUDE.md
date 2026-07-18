@@ -88,7 +88,7 @@ RespondStage 发送最终 chain
 | `render/table.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
 | `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
 | `render/chain.py` | async 并发组装，asyncio.gather 收集渲染结果，按原序构建消息链 |
-| `render/clean/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
+| `render/clean/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 + 纯文本清洗函数(clean_code_block/clean_table/clean_expr) |
 | `render/clean/temp_cleaner.py` | 周期性扫描 temp/，按配置存活时长删过期临时文件 |
 | `render/utils.py` | `RenderConfig` + `CleanConfig` dataclass + 配置加载/颜色解析/字体发现/临时路径 |
 
@@ -116,6 +116,7 @@ RespondStage 发送最终 chain
 
 **清洗**（`raw["清洗"]`）：
 - 加粗/斜体/删除线/行内代码/链接/标题/无序列表/有序列表/引用/图片：bool 开关，默认全部开启
+- 代码块/表格/表达式（清洗）：bool 开关，默认关闭
 - 清洗基于 markdown-it-py token 树，颜表情中的 `*` `_` `~` 不会被误杀
 
 ### 设计文档
