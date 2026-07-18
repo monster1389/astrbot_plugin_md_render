@@ -34,6 +34,12 @@ class MockImage:
         img.file = path
         return img
 
+    @staticmethod
+    def fromBytes(data: bytes):
+        img = MockImage()
+        img.data = data
+        return img
+
 class MockFile:
     def __init__(self, name: str = "", file: str = ""):
         self.name = name

@@ -203,3 +203,48 @@ class TestBuildChain:
         assert len(result) == 2
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
+
+    @patch("render.chain.render_code")
+    def test_code_zero_ttl_uses_frombytes(self, mock_render):
+        """temp_ttl=0 时代码块用 Image.fromBytes，不走文件落盘。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="渲染图像", temp_ttl=0)
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
+        assert len(result) == 1
+        img = result[0]
+        assert isinstance(img, Image)
+        assert hasattr(img, "data") and img.data == b"fake_png_data"
+        assert not hasattr(img, "file")
+
+    @patch("render.chain.render_table")
+    def test_table_zero_ttl_uses_frombytes(self, mock_render):
+        """temp_ttl=0 时表格用 Image.fromBytes，不走文件落盘。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = b"fake_png_data"
+        segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
+        cfg = _make_cfg(table_mode="渲染图像", temp_ttl=0)
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
+        assert len(result) == 1
+        img = result[0]
+        assert isinstance(img, Image)
+        assert hasattr(img, "data") and img.data == b"fake_png_data"
+        assert not hasattr(img, "file")
+
+    @patch("render.chain.render_inline_expr")
+    def test_expr_zero_ttl_uses_frombytes(self, mock_render):
+        """temp_ttl=0 时表达式用 Image.fromBytes，不走文件落盘。"""
+        from render.chain import build_chain
+
+        mock_render.return_value = b"fake_png_data"
+        segments = [InlineExpr(expr="E=mc^2")]
+        cfg = _make_cfg(expr_mode="渲染图像", temp_ttl=0)
+        result = asyncio.run(build_chain(segments, cfg, "/tmp"))
+        assert len(result) == 1
+        img = result[0]
+        assert isinstance(img, Image)
+        assert hasattr(img, "data") and img.data == b"fake_png_data"
+        assert not hasattr(img, "file")

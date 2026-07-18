@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**和**表格**，渲染为图片/文件后替换到消息链。其余 markdown 元素原样穿过。
+AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**、**表格**和**数学表达式**，渲染为图片/文件后替换到消息链。其余 markdown 元素原样穿过。
 
 管道位置：`OnDecoratingResultEvent`（priority=1000），在 RespondStage 之前修改 `result.chain`。
 
@@ -99,7 +99,7 @@ RespondStage 发送最终 chain
 
 ### 依赖
 
-`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`
+`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`, `py7zr`
 
 ### 配置
 
@@ -113,4 +113,4 @@ RespondStage 发送最终 chain
 
 ### 设计文档
 
-设计文档见 `docs/designs/`，注意部分内容可能过时，以当前代码为准。
+历史设计文档见 `docs/designs/`（如存在），注意部分内容可能过时，以当前代码为准。
