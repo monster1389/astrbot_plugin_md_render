@@ -135,7 +135,7 @@ class MdRenderPlugin(Star):
         if not has_elements:
             return
 
-        built = await build_chain(segments, self.cfg, data_dir)
+        built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)
 
         # 汇总日志（0 则静默）
         image_count = sum(1 for item in built if isinstance(item, Image))

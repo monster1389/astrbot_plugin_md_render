@@ -22,7 +22,8 @@ from render.parser import (
     Table,
 )
 from render.table import render_table
-from render.utils import RenderConfig, build_temp_path
+from render.clean.md_cleaner import clean_markdown
+from render.utils import RenderConfig, CleanConfig, build_temp_path
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,7 @@ def _dispatch_result(
 async def build_chain(
     segments: list[Any],
     cfg: RenderConfig,
+    clean_cfg: CleanConfig | None,
     data_dir: str,
 ) -> list[Plain | Image | AstrFile]:
     """将解析后的 Segment 列表转换为 AstrBot Component 列表。
@@ -197,6 +199,7 @@ async def build_chain(
     Args:
         segments: parser.parse() 输出的 Segment 列表。
         cfg: 渲染配置。
+        clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
 
     Returns:
@@ -241,7 +244,10 @@ async def build_chain(
         elif isinstance(seg, (CodeBlock, Table, InlineExpr, BlockExpr)):
             _dispatch_result(chain, seg, None, cfg, data_dir)
         elif isinstance(seg, Segment):
-            chain.append(Plain(seg.text))
+            text = seg.text
+            if clean_cfg is not None:
+                text = clean_markdown(text, clean_cfg)
+            chain.append(Plain(text))
 
     return chain
 
