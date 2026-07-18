@@ -1,4 +1,8 @@
-"""配置读取、颜色解析、字体发现、临时路径构建。"""
+"""配置读取、颜色解析、字体发现、临时路径构建。
+
+导出: RenderConfig, CleanConfig, load_config, parse_color, get_font,
+      find_font_path, build_temp_path
+"""
 from __future__ import annotations
 
 import logging
@@ -92,24 +96,49 @@ class CleanConfig:
     image: bool = True
 
 
-def load_config(raw: dict) -> RenderConfig:
-    """从 AstrBot 原始配置字典构造 RenderConfig。
+def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
+    """从 AstrBot 原始配置字典构造 RenderConfig 和 CleanConfig。
+
+    适配嵌套配置结构：raw["渲染"] 包含渲染配置，raw["清洗"] 包含清洗配置。
+    也向后兼容旧版平铺结构：直接取 raw 的顶层键。
 
     Args:
         raw: AstrBot 配置字典。
 
     Returns:
-        RenderConfig 实例。
+        (RenderConfig, CleanConfig) 元组。
     """
-    return RenderConfig(
-        code_mode=raw.get("代码块", "渲染且md文件"),
-        table_mode=raw.get("表格", "渲染图像"),
-        expr_mode=raw.get("表达式", "渲染图像"),
-        divider_mode=raw.get("分隔线", "不处理"),
-        font_color=parse_color(raw.get("字体颜色", "#9CDCFE (浅蓝)")),
-        bg_color=parse_color(raw.get("背景颜色", "#1E1E1E (VS Code 深色)")),
-        temp_ttl=int(raw.get("临时文件存活", 0)),
+    render_raw = raw.get("渲染", {})
+    if not render_raw:
+        # 向后兼容旧版平铺配置
+        render_raw = raw
+
+    clean_raw = raw.get("清洗", {})
+
+    render_cfg = RenderConfig(
+        code_mode=render_raw.get("代码块", "渲染且md文件"),
+        table_mode=render_raw.get("表格", "渲染图像"),
+        expr_mode=render_raw.get("表达式", "渲染图像"),
+        divider_mode=render_raw.get("分隔线", "不处理"),
+        font_color=parse_color(render_raw.get("字体颜色", "#9CDCFE (浅蓝)")),
+        bg_color=parse_color(render_raw.get("背景颜色", "#1E1E1E (VS Code 深色)")),
+        temp_ttl=int(render_raw.get("临时文件存活", 0)),
     )
+
+    clean_cfg = CleanConfig(
+        bold=bool(clean_raw.get("加粗", True)),
+        italic=bool(clean_raw.get("斜体", True)),
+        strikethrough=bool(clean_raw.get("删除线", True)),
+        inline_code=bool(clean_raw.get("行内代码", True)),
+        link=bool(clean_raw.get("链接", True)),
+        heading=bool(clean_raw.get("标题", True)),
+        list_unordered=bool(clean_raw.get("列表标记（无序）", True)),
+        list_ordered=bool(clean_raw.get("列表标记（有序）", True)),
+        blockquote=bool(clean_raw.get("引用", True)),
+        image=bool(clean_raw.get("图片", True)),
+    )
+
+    return render_cfg, clean_cfg
 
 
 def parse_color(value: str) -> str:
