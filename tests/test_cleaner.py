@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
-from render.cleaner import _parse_file_ts
+from render.clean.temp_cleaner import _parse_file_ts
 
 
 class TestParseFileTs:
@@ -45,20 +45,20 @@ class TestParseFileTs:
 class TestCleaner:
     """测试 _scan_and_clean 清理逻辑。"""
 
-    @patch("render.cleaner.os.remove")
-    @patch("render.cleaner.os.listdir")
+    @patch("render.clean.temp_cleaner.os.remove")
+    @patch("render.clean.temp_cleaner.os.listdir")
     def test_cleanup_skip_permanent(self, mock_listdir, mock_remove):
         """TTL=-1 不删除任何文件。"""
         temp_dir = "/tmp/test_temp"
         mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
-        from render.cleaner import _scan_and_clean
+        from render.clean.temp_cleaner import _scan_and_clean
 
         _scan_and_clean(temp_dir, ttl_minutes=-1)
         mock_remove.assert_not_called()
 
-    @patch("render.cleaner.os.remove")
-    @patch("render.cleaner.os.listdir")
+    @patch("render.clean.temp_cleaner.os.remove")
+    @patch("render.clean.temp_cleaner.os.listdir")
     def test_cleanup_immediate(self, mock_listdir, mock_remove):
         """TTL=0 删除所有解析成功的文件。"""
         temp_dir = "/tmp/test_temp"
@@ -68,13 +68,13 @@ class TestCleaner:
             "random.txt",
         ]
 
-        from render.cleaner import _scan_and_clean
+        from render.clean.temp_cleaner import _scan_and_clean
 
         _scan_and_clean(temp_dir, ttl_minutes=0)
         assert mock_remove.call_count == 2  # random.txt skipped
 
-    @patch("render.cleaner.os.remove")
-    @patch("render.cleaner.os.listdir")
+    @patch("render.clean.temp_cleaner.os.remove")
+    @patch("render.clean.temp_cleaner.os.listdir")
     def test_cleanup_expired(self, mock_listdir, mock_remove):
         """TTL>0 只删除过期文件。
 
@@ -84,7 +84,7 @@ class TestCleaner:
         temp_dir = "/tmp/test_temp"
         mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
-        from render.cleaner import _scan_and_clean
+        from render.clean.temp_cleaner import _scan_and_clean
 
         _scan_and_clean(
             temp_dir,
@@ -94,8 +94,8 @@ class TestCleaner:
 
         mock_remove.assert_called_once()
 
-    @patch("render.cleaner.os.remove")
-    @patch("render.cleaner.os.listdir")
+    @patch("render.clean.temp_cleaner.os.remove")
+    @patch("render.clean.temp_cleaner.os.listdir")
     def test_cleanup_not_expired(self, mock_listdir, mock_remove):
         """TTL>0 不删除未过期文件。
 
@@ -105,7 +105,7 @@ class TestCleaner:
         temp_dir = "/tmp/test_temp"
         mock_listdir.return_value = ["table_20260624_114940_123456.png"]
 
-        from render.cleaner import _scan_and_clean
+        from render.clean.temp_cleaner import _scan_and_clean
 
         _scan_and_clean(
             temp_dir,

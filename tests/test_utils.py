@@ -49,33 +49,79 @@ class TestBuildTempPath:
 class TestLoadConfig:
     def test_defaults(self):
         raw = {}
-        cfg = load_config(raw)
-        assert cfg.code_mode == "渲染且md文件"
-        assert cfg.table_mode == "渲染图像"
-        assert cfg.expr_mode == "渲染图像"
-        assert cfg.divider_mode == "不处理"
-        assert cfg.font_color == "#9CDCFE"
-        assert cfg.bg_color == "#1E1E1E"
-        assert cfg.temp_ttl == 0
+        render_cfg, clean_cfg = load_config(raw)
+        assert render_cfg.code_mode == "渲染且md文件"
+        assert render_cfg.table_mode == "渲染图像"
+        assert render_cfg.expr_mode == "渲染图像"
+        assert render_cfg.divider_mode == "不处理"
+        assert render_cfg.font_color == "#9CDCFE"
+        assert render_cfg.bg_color == "#1E1E1E"
+        assert render_cfg.temp_ttl == 0
+        assert clean_cfg.bold is True
+        assert clean_cfg.italic is True
+        assert clean_cfg.strikethrough is True
+        assert clean_cfg.inline_code is True
+        assert clean_cfg.link is True
+        assert clean_cfg.heading is True
+        assert clean_cfg.list_unordered is True
+        assert clean_cfg.list_ordered is True
+        assert clean_cfg.blockquote is True
+        assert clean_cfg.image is True
 
     def test_custom_values(self):
         raw = {
-            "代码块": "渲染图像",
-            "表格": "渲染且保留原文",
-            "表达式": "渲染图像",
-            "分隔线": "渲染图像",
-            "字体颜色": "#FF0000 (红)",
-            "背景颜色": "#000000 (黑)",
-            "临时文件存活": 10,
+            "渲染": {
+                "代码块": "渲染图像",
+                "表格": "渲染且保留原文",
+                "表达式": "渲染图像",
+                "分隔线": "渲染图像",
+                "字体颜色": "#FF0000 (红)",
+                "背景颜色": "#000000 (黑)",
+                "临时文件存活": 10,
+            },
+            "清洗": {
+                "加粗": False,
+                "斜体": True,
+            },
         }
-        cfg = load_config(raw)
-        assert cfg.code_mode == "渲染图像"
-        assert cfg.table_mode == "渲染且保留原文"
-        assert cfg.expr_mode == "渲染图像"
-        assert cfg.divider_mode == "渲染图像"
-        assert cfg.font_color == "#FF0000"
-        assert cfg.bg_color == "#000000"
-        assert cfg.temp_ttl == 10
+        render_cfg, clean_cfg = load_config(raw)
+        assert render_cfg.code_mode == "渲染图像"
+        assert render_cfg.table_mode == "渲染且保留原文"
+        assert render_cfg.expr_mode == "渲染图像"
+        assert render_cfg.divider_mode == "渲染图像"
+        assert render_cfg.font_color == "#FF0000"
+        assert render_cfg.bg_color == "#000000"
+        assert render_cfg.temp_ttl == 10
+        assert clean_cfg.bold is False
+        assert clean_cfg.italic is True
+
+    def test_backward_compat_flat_config(self):
+        """旧版平铺配置向后兼容。"""
+        raw = {
+            "代码块": "渲染图像",
+            "表格": "不处理",
+            "表达式": "不处理",
+            "分隔线": "不处理",
+            "字体颜色": "#FFFFFF (纯白)",
+            "背景颜色": "#000000 (纯黑)",
+            "临时文件存活": -1,
+        }
+        render_cfg, clean_cfg = load_config(raw)
+        assert render_cfg.code_mode == "渲染图像"
+        assert render_cfg.font_color == "#FFFFFF"
+
+    def test_clean_config_partial(self):
+        """清洗配置部分覆盖。"""
+        raw = {
+            "清洗": {
+                "加粗": False,
+                "图片": False,
+            },
+        }
+        _, clean_cfg = load_config(raw)
+        assert clean_cfg.bold is False
+        assert clean_cfg.image is False
+        assert clean_cfg.italic is True  # 未指定，默认
 
 
 class TestRenderConfig:
