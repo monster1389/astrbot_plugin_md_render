@@ -45,11 +45,27 @@ class TestCleanAllOn:
     def test_clean_heading_h3(self):
         assert clean_markdown("### 三级标题", _cfg()) == "三级标题"
 
+    def test_clean_heading_preserves_paragraph_break(self):
+        """清洗标题后保留与后续段落的 \n\n。"""
+        assert clean_markdown("# 标题\n\n内容", _cfg()) == "标题\n\n内容"
+
+    def test_clean_heading_at_end_no_trailing(self):
+        """标题在文末无后续内容时不追加 \n\n。"""
+        assert clean_markdown("# 标题", _cfg()) == "标题"
+
     def test_clean_unordered_list(self):
         assert clean_markdown("- 项目", _cfg()) == "项目"
 
+    def test_clean_unordered_list_preserves_newlines(self):
+        """清洗无序列表后保留列表项间 \n。"""
+        assert clean_markdown("- a\n- b", _cfg()) == "a\nb"
+
     def test_clean_ordered_list(self):
         assert clean_markdown("1. 第一", _cfg()) == "第一"
+
+    def test_clean_ordered_list_preserves_newlines(self):
+        """清洗有序列表后保留列表项间 \n。"""
+        assert clean_markdown("1. a\n2. b", _cfg()) == "a\nb"
 
     def test_clean_blockquote(self):
         assert clean_markdown("> 引用", _cfg()) == "引用"

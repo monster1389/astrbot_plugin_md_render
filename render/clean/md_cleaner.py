@@ -78,9 +78,14 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
             else:
                 parts.append(f"`{t.content}`")
 
-        elif t.type in ("heading_open", "heading_close"):
+        elif t.type == "heading_open":
             if not cfg.heading:
                 parts.append(t.markup)
+        elif t.type == "heading_close":
+            if not cfg.heading:
+                parts.append(t.markup)
+            elif i + 1 < len(tokens):
+                parts.append("\n\n")
         elif t.type == "blockquote_open":
             if not cfg.blockquote:
                 parts.append("> ")
@@ -112,7 +117,7 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
                 list_counter += 1
                 parts.append(f"{t.info or str(list_counter)}. ")
         elif t.type == "list_item_close":
-            if parent_type is not None and i + 1 < len(tokens) and tokens[i + 1].type == "list_item_open":
+            if i + 1 < len(tokens) and tokens[i + 1].type == "list_item_open":
                 parts.append("\n")
 
         elif t.type == "paragraph_open":
