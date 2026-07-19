@@ -26,7 +26,7 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
-from render.chain import build_chain  # noqa: E402
+from render.chain import build_chain, merge_chain, _is_plain  # noqa: E402
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
@@ -115,9 +115,7 @@ class MdRenderPlugin(Star):
         # 收集所有 Plain 文本，拼接后统一解析
         text_parts: list[str] = []
         for comp in chain:
-            if hasattr(comp, "text") and type(comp).__name__ == "Plain":
-                text_parts.append(comp.text or "")
-            elif hasattr(comp, "type") and comp.type == "Plain":
+            if _is_plain(comp):
                 text_parts.append(comp.text or "")
 
         full_text = "\n".join(text_parts)
@@ -152,7 +150,7 @@ class MdRenderPlugin(Star):
                 parts.append(f"表达式({self.cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
-        result.chain = built
+        result.chain = merge_chain(chain, built)
 
     async def terminate(self):
         """插件销毁。"""

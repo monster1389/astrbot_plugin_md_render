@@ -304,6 +304,40 @@ async def build_chain(
     return chain
 
 
+def _is_plain(comp: Any) -> bool:
+    """判断组件是否为 Plain 文本。
+
+    Args:
+        comp: AstrBot 消息链组件。
+
+    Returns:
+        True 表示该组件为 Plain 文本。
+    """
+    return (
+        (hasattr(comp, "text") and type(comp).__name__ == "Plain")
+        or (hasattr(comp, "type") and comp.type == "Plain")
+    )
+
+
+def merge_chain(original: list[Any], built: list[Any]) -> list[Any]:
+    """合并原始链的非 Plain 组件到构建链之前。
+
+    原链中的 Image、File、Reply 等非 Plain 组件不会被 build_chain
+    生成的新链覆盖，全部保留并按原顺序前置。
+
+    Args:
+        original: 原始的 AstrBot 消息链。
+        built: build_chain 构建的新消息链。
+
+    Returns:
+        合并后的消息链。
+    """
+    non_plain = [c for c in original if not _is_plain(c)]
+    if not non_plain:
+        return built
+    return non_plain + built
+
+
 def _table_to_text(table: Table) -> str:
     """将 Table 还原为原始 markdown 文本。
 

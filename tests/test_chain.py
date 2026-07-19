@@ -418,3 +418,63 @@ class TestBuildChainWithCleaning:
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "E=mc^2"
+
+
+class TestMergeChain:
+    def test_image_preserved(self):
+        """原链中的 Image 组件在合并后保留。"""
+        from render.chain import merge_chain
+
+        original = [Image.fromFileSystem("/tmp/ava.png"), Plain("角色数据")]
+        built = [Plain("角色数据")]
+        result = merge_chain(original, built)
+        assert len(result) == 2
+        assert isinstance(result[0], Image)
+        assert isinstance(result[1], Plain)
+        assert result[1].text == "角色数据"
+
+    def test_file_preserved(self):
+        """原链中的 File 组件在合并后保留。"""
+        from render.chain import merge_chain
+
+        original = [AstrFile(name="doc.md", file="/tmp/doc.md"), Plain("文本")]
+        built = [Plain("文本")]
+        result = merge_chain(original, built)
+        assert len(result) == 2
+        assert isinstance(result[0], AstrFile)
+        assert isinstance(result[1], Plain)
+
+    def test_multiple_non_plain_preserved(self):
+        """多个非 Plain 组件均保留，按原顺序前置。"""
+        from render.chain import merge_chain
+
+        original = [
+            Image.fromFileSystem("/tmp/a.png"),
+            AstrFile(name="b.md", file="/tmp/b.md"),
+            Plain("文本"),
+        ]
+        built = [Plain("文本")]
+        result = merge_chain(original, built)
+        assert len(result) == 3
+        assert isinstance(result[0], Image)
+        assert isinstance(result[1], AstrFile)
+        assert isinstance(result[2], Plain)
+
+    def test_plain_only_chain_unchanged(self):
+        """纯 Plain 原链：built 直接返回，不添加额外组件。"""
+        from render.chain import merge_chain
+
+        original = [Plain("Hello")]
+        built = [Plain("Hello")]
+        result = merge_chain(original, built)
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert result[0].text == "Hello"
+
+    def test_empty_original_preserves_built(self):
+        """空原链直接返回 built。"""
+        from render.chain import merge_chain
+
+        built = [Plain("text")]
+        result = merge_chain([], built)
+        assert result == built

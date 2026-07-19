@@ -27,6 +27,9 @@ class MockPlain:
     def __init__(self, text: str = ""):
         self.text = text
 
+MockPlain.__name__ = "Plain"
+MockPlain.__qualname__ = "Plain"
+
 class MockImage:
     @staticmethod
     def fromFileSystem(path: str):
