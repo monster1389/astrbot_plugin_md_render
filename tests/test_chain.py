@@ -102,8 +102,8 @@ class TestBuildChain:
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
         assert isinstance(result[0], Image)
 
-    def test_divider_split(self):
-        """分隔线切分模式：不产生 Component（保留给外部 splitter）。"""
+    def test_divider_split_mode_consumes_divider(self):
+        """分隔线切分模式：去掉 ---，两侧独立为 Plain 不黏连。"""
         from render.chain import build_chain
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
@@ -111,6 +111,8 @@ class TestBuildChain:
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
         assert len(result) == 2
         assert all(isinstance(c, Plain) for c in result)
+        assert result[0].text == "上"
+        assert result[1].text == "下"
 
     def test_divider_noop_outputs_text(self):
         """分隔线不处理模式：输出 --- 文本，保留段落分隔。"""

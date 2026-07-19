@@ -121,18 +121,46 @@ class TestExpr:
 
 
 class TestDivider:
-    def test_divider(self):
-        """分隔线 ---。"""
-        text = "上面\n---\n下面"
+    def test_divider_with_blank_lines(self):
+        """空行包裹的 --- 识别为分隔线。"""
+        text = "上面\n\n---\n\n下面"
         segments = parse(text)
         dividers = [s for s in segments if isinstance(s, Divider)]
         assert len(dividers) == 1
 
-    def test_divider_with_spaces(self):
-        """含空格分隔线 - - -。"""
-        text = "上面\n- - -\n下面"
+    def test_divider_star_variant(self):
+        """空行包裹的 *** 识别为分隔线。"""
+        text = "上面\n\n***\n\n下面"
         segments = parse(text)
-        assert any(isinstance(s, Divider) for s in segments)
+        dividers = [s for s in segments if isinstance(s, Divider)]
+        assert len(dividers) == 1
+
+    def test_divider_underscore_variant(self):
+        """空行包裹的 ___ 识别为分隔线。"""
+        text = "上面\n\n___\n\n下面"
+        segments = parse(text)
+        dividers = [s for s in segments if isinstance(s, Divider)]
+        assert len(dividers) == 1
+
+    def test_hr_in_lyrics_not_divider(self):
+        """歌词中无极行包裹的 --- 不是分隔线，保留为文本。"""
+        text = "寄り添うことだけさ\n---\nそう　僕らは"
+        segments = parse(text)
+        assert not any(isinstance(s, Divider) for s in segments)
+        plain = "".join(s.text for s in segments if hasattr(s, "text"))
+        assert "---" in plain
+
+    def test_hr_without_blank_lines_not_divider(self):
+        """无空行包裹的 --- 不是分隔线。"""
+        text = "上面\n---\n下面"
+        segments = parse(text)
+        assert not any(isinstance(s, Divider) for s in segments)
+
+    def test_divider_double_dash_not_divider(self):
+        """只有两个 -- 不算分隔线。"""
+        text = "上面\n\n--\n\n下面"
+        segments = parse(text)
+        assert not any(isinstance(s, Divider) for s in segments)
 
 
 class TestMixed:

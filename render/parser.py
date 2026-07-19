@@ -15,6 +15,11 @@ _MATH_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
 _MATH_PLACEHOLDER_PREFIX = "\x01MATHBLOCK"
 _MATH_PLACEHOLDER_RE = re.compile(r"\x01MATHBLOCK(\d+)\x01")
 
+# 匹配纯分隔线行：至少 3 个 - / * / _，允许空格穿插
+_HR_LINE_RE = re.compile(
+    r"^[ \t]*((?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$"
+)
+
 # 匹配闭合的 $...$ 对：内容 1-100 非 $ 非换行字符，首尾非空格
 _INLINE_EXPR_RE = re.compile(
     r"(?<!\\)\$"
@@ -217,6 +222,44 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
     return Table(headers=headers, rows=rows), j + 1
 
 
+def _split_hr_from_segments(
+    segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider],
+) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
+    """后处理：从 Segment 文本中识别有空行包裹的分隔线，拆分为 Divider。
+
+    仅当 --- / *** / ___ 前后有空行（\\n\\n）时才视为分隔线，
+    歌词等场景中的无空行 --- 不会被误判。
+
+    Args:
+        segments: 初次解析后的片段列表。
+
+    Returns:
+        插入 Divider 后的片段列表。
+    """
+    result: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider] = []
+    for seg in segments:
+        if not isinstance(seg, Segment):
+            result.append(seg)
+            continue
+        paragraphs = seg.text.split("\n\n")
+        non_hr_parts: list[str] = []
+        for para in paragraphs:
+            if _HR_LINE_RE.match(para):
+                if non_hr_parts:
+                    result.append(Segment(text="\n\n".join(non_hr_parts)))
+                    non_hr_parts.clear()
+                result.append(Divider())
+            else:
+                if para:
+                    non_hr_parts.append(para)
+                elif non_hr_parts:
+                    # 空段落（连续 \n\n）保留为段落分隔
+                    non_hr_parts.append("")
+        if non_hr_parts:
+            result.append(Segment(text="\n\n".join(non_hr_parts)))
+    return result
+
+
 def _is_valid_inline_expr(content: str) -> bool:
     """检查 $...$ 内容是否像 LaTeX 表达式而非自然语言。
 
@@ -317,7 +360,7 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
     # 预提取 $$...$$ 块级数学表达式，避免 markdown-it 将其当作文本处理
     processed_text, block_math = _pre_extract_block_math(text)
 
-    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "hr", "emphasis", "backticks", "link"])
+    md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "emphasis", "backticks", "link"])
     md.options["html"] = False
     tokens: list[Token] = md.parse(processed_text)
     segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider] = []
@@ -357,12 +400,6 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
             i += 1
             continue
 
-        if t.type == "hr":
-            flush_buf()
-            segments.append(Divider())
-            i += 1
-            continue
-
         # markdown-it-py 结构 token，仅用于嵌套关系，不承载文本
         if t.type in ("paragraph_open", "paragraph_close", "bullet_list_open",
                        "bullet_list_close", "list_item_open", "list_item_close",
@@ -384,4 +421,4 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
         i += 1
 
     flush_buf()
-    return segments
+    return _split_hr_from_segments(segments)
