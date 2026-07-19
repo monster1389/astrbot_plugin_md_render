@@ -54,6 +54,11 @@ class TestCleanAllOn:
     def test_clean_blockquote(self):
         assert clean_markdown("> 引用", _cfg()) == "引用"
 
+    def test_clean_blockquote_preserves_paragraph_break(self):
+        """清洗引用后保留与后续段落的段落分隔。"""
+        result = clean_markdown("> 1% 用户 → 没问题\n\n每个阶段", _cfg())
+        assert result == "1% 用户 → 没问题\n\n每个阶段"
+
     def test_clean_mixed_format(self):
         text = "**粗体** 和 *斜体* 和 ~~删除~~ 和 `代码`"
         result = clean_markdown(text, _cfg())

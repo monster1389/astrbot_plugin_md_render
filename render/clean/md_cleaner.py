@@ -85,7 +85,9 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
             if not cfg.blockquote:
                 parts.append("> ")
         elif t.type == "blockquote_close":
-            if not cfg.blockquote:
+            if cfg.blockquote and i + 1 < len(tokens):
+                parts.append("\n\n")
+            elif not cfg.blockquote:
                 parts.append("")
 
         elif t.type == "bullet_list_open":
