@@ -16,6 +16,7 @@ from render.expr import render_block_expr, render_inline_expr
 from render.parser import (
     BlockExpr,
     CodeBlock,
+    Divider,
     InlineExpr,
     RichCell,
     Segment,
@@ -286,6 +287,9 @@ async def build_chain(
             _dispatch_result(chain, seg, results[i], cfg, clean_cfg, data_dir)
         elif isinstance(seg, (CodeBlock, Table, InlineExpr, BlockExpr)):
             _dispatch_result(chain, seg, None, cfg, clean_cfg, data_dir)
+        elif isinstance(seg, Divider):
+            if cfg.divider_mode == "不处理":
+                chain.append(Plain("\n\n---\n\n"))
         elif isinstance(seg, Segment):
             text = seg.text
             if clean_cfg is not None:

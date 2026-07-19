@@ -112,6 +112,28 @@ class TestBuildChain:
         assert len(result) == 2
         assert all(isinstance(c, Plain) for c in result)
 
+    def test_divider_noop_outputs_text(self):
+        """分隔线不处理模式：输出 --- 文本，保留段落分隔。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="上"), Divider(), Segment(text="下")]
+        cfg = _make_cfg(divider_mode="不处理")
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        assert len(result) == 3
+        assert isinstance(result[1], Plain)
+        assert "---" in result[1].text
+
+    def test_divider_noop_with_cleaning_keeps_breaks(self):
+        """分隔线不处理 + 清洗：段间补 \n\n 防止黏连。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="前面\n\n"), Divider(), Segment(text="**后面**")]
+        cfg = _make_cfg(divider_mode="不处理")
+        clean_cfg = _make_clean_cfg()
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        full = "".join(c.text for c in result)
+        assert "前面\n\n---\n\n后面" in full
+
     @patch("render.chain.render_inline_expr")
     def test_inline_expr_render_image(self, mock_render):
         """行内表达式渲染图像模式。"""
