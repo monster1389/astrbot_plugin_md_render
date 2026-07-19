@@ -162,6 +162,17 @@ class TestDivider:
         segments = parse(text)
         assert not any(isinstance(s, Divider) for s in segments)
 
+    def test_divider_preserves_trailing_newlines(self):
+        """分隔线前的 segment 保留尾部 \\n\\n，保证 splitter 能切分。"""
+        text = "上面\n\n---\n\n下面"
+        segments = parse(text)
+        assert len(segments) == 3
+        assert isinstance(segments[0], Segment)
+        assert isinstance(segments[1], Divider)
+        assert isinstance(segments[2], Segment)
+        assert segments[0].text.endswith("\n\n")
+        assert not segments[2].text.startswith("\n\n")
+
 
 class TestMixed:
     def test_code_then_table(self):
