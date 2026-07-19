@@ -294,9 +294,6 @@ async def build_chain(
             text = seg.text
             if clean_cfg is not None:
                 text = clean_markdown(text, clean_cfg)
-                # clean_markdown 通过 markdown-it-py 解析，会消耗末尾的
-                # \n\n（段落间距），但 parser 用末尾 \n\n 标记段间分隔，
-                # 丢失会导致 splitter 将本应分开的段落合并，故保留。
                 if seg.text.endswith("\n\n") and not text.endswith("\n\n"):
                     if not text.endswith("\n"):
                         text += "\n\n"

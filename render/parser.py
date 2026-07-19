@@ -253,7 +253,6 @@ def _split_hr_from_segments(
                 if para:
                     non_hr_parts.append(para)
                 elif non_hr_parts:
-                    # 空段落（连续 \n\n）保留为段落分隔
                     non_hr_parts.append("")
         if non_hr_parts:
             result.append(Segment(text="\n\n".join(non_hr_parts)))
