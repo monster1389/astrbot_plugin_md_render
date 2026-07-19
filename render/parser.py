@@ -246,7 +246,7 @@ def _split_hr_from_segments(
         for para in paragraphs:
             if _HR_LINE_RE.match(para):
                 if non_hr_parts:
-                    result.append(Segment(text="\n\n".join(non_hr_parts) + "\n\n"))
+                    result.append(Segment(text="\n\n".join(non_hr_parts)))
                     non_hr_parts.clear()
                 result.append(Divider())
             else:
