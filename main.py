@@ -132,7 +132,8 @@ class MdRenderPlugin(Star):
             isinstance(s, (CodeBlock, Table, InlineExpr, BlockExpr, Divider))
             for s in segments
         )
-        if not has_elements:
+        needs_cleaning = self.clean_cfg is not None and any(vars(self.clean_cfg).values())
+        if not has_elements and not needs_cleaning:
             return
 
         built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)
