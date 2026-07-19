@@ -126,7 +126,7 @@ class TestBuildChain:
         assert "---" in result[1].text
 
     def test_divider_noop_with_cleaning_keeps_breaks(self):
-        """分隔线不处理 + 清洗：段间补 \n\n 防止黏连。"""
+        """分隔线不处理 + 清洗：Segment 末尾 \n\n 清洗后保留，配合 Divider 的 \n\n 分段。"""
         from render.chain import build_chain
 
         segments = [Segment(text="前面\n\n"), Divider(), Segment(text="**后面**")]
@@ -134,7 +134,23 @@ class TestBuildChain:
         clean_cfg = _make_clean_cfg()
         result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
         full = "".join(c.text for c in result)
-        assert "前面\n\n---\n\n后面" in full
+        # Segment 末尾 \n\n 被清洗保留 + Divider 输出 \n\n---\n\n，共 4 个 \n
+        assert "前面\n\n\n\n---\n\n后面" in full
+
+    def test_divider_split_with_cleaning_preserves_separation(self):
+        """切分模式 + 清洗：Divider 两侧段落保留 \n\n 分隔，不会被 splitter 合并。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="好，第一轮回顾 (。-`ω´-)\n\n"), Divider(), Segment(text="**测试 1：纯闲聊**")]
+        cfg = _make_cfg(divider_mode="切分")
+        clean_cfg = _make_clean_cfg()
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        assert len(result) == 2
+        assert isinstance(result[0], Plain)
+        assert isinstance(result[1], Plain)
+        # 清洗保留末尾 \n\n，确保分割器能识别段落边界
+        assert result[0].text == "好，第一轮回顾 (。-`ω´-)\n\n"
+        assert result[1].text == "测试 1：纯闲聊"
 
     @patch("render.chain.render_inline_expr")
     def test_inline_expr_render_image(self, mock_render):
