@@ -102,6 +102,8 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
                 parent_type = None
         elif t.type == "bullet_list_close":
             parent_type = None
+            if i + 1 < len(tokens):
+                parts.append("\n\n")
         elif t.type == "ordered_list_open":
             if not cfg.list_ordered:
                 parent_type = "ordered_list"
@@ -110,6 +112,8 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
                 parent_type = None
         elif t.type == "ordered_list_close":
             parent_type = None
+            if i + 1 < len(tokens):
+                parts.append("\n\n")
         elif t.type == "list_item_open":
             if parent_type == "bullet_list":
                 parts.append("- ")
