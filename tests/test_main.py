@@ -17,7 +17,7 @@ class _MockContext:
 
 class _MockStar:
     def __init__(self, context=None):
-        pass
+        self.context = context
 
 class _MockStarTools:
     @staticmethod
@@ -47,8 +47,14 @@ class _MockFilter:
 class _MockAstrMessageEvent:
     pass
 
+class _MockMessageChain:
+    def __init__(self):
+        self.chain = []
+
+
 _event.filter = _MockFilter()
 _event.AstrMessageEvent = _MockAstrMessageEvent
+_event.MessageChain = _MockMessageChain
 sys.modules["astrbot.api.event"] = _event
 
 # AstrBotConfig — main.py 用其做类型标注
@@ -122,3 +128,63 @@ class TestOnDecoratingResultWithoutRenderableElements:
             updated = event.get_result.return_value.chain
             text = "".join(c.text for c in updated)
             assert "**" in text, "清洗全关时原文应保留不变"
+
+
+class TestSplitIntoMessages:
+    def _make_plugin(self, config, context):
+        from main import MdRenderPlugin
+        from render.utils import load_config
+
+        plugin = MdRenderPlugin(context=context, config=config)
+        plugin.cfg, plugin.clean_cfg = load_config(config)
+        return plugin
+
+    def test_divider_split_sends_front_segments(self):
+        """分隔线=切分：前置段逐条 send，末段留在 result.chain。"""
+        from unittest.mock import AsyncMock, MagicMock
+
+        chain = [Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "切分", "连续换行": "不处理", "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        with patch('main.StarTools') as mock_tools:
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = self._make_plugin(config, context)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        assert context.send_message.await_count == 2
+        updated = event.get_result.return_value.chain
+        text = "".join(c.text for c in updated)
+        assert text.strip() == "第三段"
+
+    def test_blank_line_split_sends_front_segments(self):
+        """连续换行=切分：空行分隔的段落逐条 send，末段留在 result.chain。"""
+        from unittest.mock import AsyncMock, MagicMock
+
+        chain = [Plain("第一段\n\n第二段\n\n第三段")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "切分", "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        with patch('main.StarTools') as mock_tools:
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = self._make_plugin(config, context)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        assert context.send_message.await_count == 2
+        updated = event.get_result.return_value.chain
+        text = "".join(c.text for c in updated)
+        assert text.strip() == "第三段"

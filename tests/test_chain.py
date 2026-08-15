@@ -477,3 +477,60 @@ class TestMergeChain:
         built = [Plain("text")]
         result = merge_chain([], built)
         assert result == built
+
+
+class TestGroupSegments:
+    def test_single_segment_single_group(self):
+        """无切分点时，单个分组。"""
+        from render.chain import group_segments
+
+        segments = [Segment(text="只有一段")]
+        cfg = _make_cfg()
+        groups = group_segments(segments, cfg)
+        assert len(groups) == 1
+        assert groups[0] == segments
+
+    def test_divider_split_when_divider_mode_split(self):
+        """分隔线=切分：`---` 处断开，Divider 不进入任何分组。"""
+        from render.chain import group_segments
+
+        segments = [Segment(text="上"), Divider(), Segment(text="下")]
+        cfg = _make_cfg(divider_mode="切分")
+        groups = group_segments(segments, cfg)
+        assert len(groups) == 2
+        assert groups[0] == [Segment(text="上")]
+        assert groups[1] == [Segment(text="下")]
+
+    def test_divider_not_split_when_divider_mode_off(self):
+        """分隔线=不处理：Divider 保留在同一分组内。"""
+        from render.chain import group_segments
+
+        segments = [Segment(text="上"), Divider(), Segment(text="下")]
+        cfg = _make_cfg(divider_mode="不处理")
+        groups = group_segments(segments, cfg)
+        assert len(groups) == 1
+        assert isinstance(groups[0][1], Divider)
+
+    def test_blank_line_split_when_blank_line_mode_split(self):
+        """连续换行=切分：相邻纯文本段之间断开。"""
+        from render.chain import group_segments
+
+        segments = [Segment(text="第一段"), Segment(text="第二段"), Segment(text="第三段")]
+        cfg = _make_cfg(blank_line_mode="切分")
+        groups = group_segments(segments, cfg)
+        assert len(groups) == 3
+        assert [g[0].text for g in groups] == ["第一段", "第二段", "第三段"]
+
+    def test_blank_line_not_split_around_non_segment(self):
+        """连续换行=切分：非纯文本段不触发空行断点。"""
+        from render.chain import group_segments
+
+        segments = [
+            Segment(text="前"),
+            CodeBlock(lang="py", code="x=1"),
+            Segment(text="后"),
+        ]
+        cfg = _make_cfg(blank_line_mode="切分")
+        groups = group_segments(segments, cfg)
+        assert len(groups) == 1
+        assert len(groups[0]) == 3

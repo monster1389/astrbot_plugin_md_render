@@ -17,7 +17,7 @@ from typing import Any
 import py7zr
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Image, File as AstrFile
 from astrbot.api.star import Context, Star, StarTools, register
 
@@ -26,7 +26,7 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
-from render.chain import build_chain, merge_chain, _is_plain  # noqa: E402
+from render.chain import build_chain, group_segments, merge_chain, _is_plain  # noqa: E402
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
@@ -100,7 +100,7 @@ class MdRenderPlugin(Star):
 
     @filter.on_decorating_result(priority=1000)
     async def on_decorating_result(self, event: AstrMessageEvent):
-        """装饰结果事件：解析 Plain 文本，渲染 markdown 元素并替换到 chain。
+        """装饰结果事件：解析 Plain 文本，渲染 markdown 元素并按切分配置分条发送。
 
         Args:
             event: AstrBot 消息事件。
@@ -122,24 +122,64 @@ class MdRenderPlugin(Star):
         if not full_text.strip():
             return
 
-        # 解析 → 组装 chain
+        # 解析 → 按切分配置分组
         segments = parse(full_text, split_blank_lines=(self.cfg.blank_line_mode == "切分"))
 
-        # 检查是否需要处理
         has_elements = any(
             isinstance(s, (CodeBlock, Table, InlineExpr, BlockExpr, Divider))
             for s in segments
         )
         needs_cleaning = self.clean_cfg is not None and any(vars(self.clean_cfg).values())
-        needs_split = self.cfg.blank_line_mode == "切分" and len(segments) > 1
+        needs_split = (
+            (self.cfg.blank_line_mode == "切分" or self.cfg.divider_mode == "切分")
+            and len(segments) > 1
+        )
         if not has_elements and not needs_cleaning and not needs_split:
             return
 
-        built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)
+        groups = group_segments(segments, self.cfg)
+        non_plain = [c for c in chain if not _is_plain(c)]
 
-        # 汇总日志（0 则静默）
-        image_count = sum(1 for item in built if isinstance(item, Image))
-        file_count = sum(1 for item in built if isinstance(item, AstrFile))
+        if len(groups) == 1:
+            built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)
+            self._log_render_summary([built])
+            result.chain = merge_chain(chain, built)
+            return
+
+        built_groups = list(await asyncio.gather(
+            *(build_chain(g, self.cfg, self.clean_cfg, data_dir) for g in groups)
+        ))
+        self._log_render_summary(built_groups)
+
+        if non_plain:
+            built_groups[0] = non_plain + built_groups[0]
+
+        for group_chain in built_groups[:-1]:
+            if self._has_content(group_chain):
+                await self._send_chain(event, group_chain)
+                await asyncio.sleep(0.2)
+
+        result.chain = built_groups[-1]
+
+    async def _send_chain(self, event: AstrMessageEvent, comps: list) -> None:
+        """将组件列表作为一条独立消息发送。
+
+        Args:
+            event: AstrBot 消息事件。
+            comps: 组件列表。
+        """
+        mc = MessageChain()
+        mc.chain = comps
+        await self.context.send_message(event.unified_msg_origin, mc)
+
+    def _log_render_summary(self, chains: list[list]) -> None:
+        """汇总渲染产物数量日志，0 则静默。
+
+        Args:
+            chains: 各消息的组件列表。
+        """
+        image_count = sum(1 for c in chains for item in c if isinstance(item, Image))
+        file_count = sum(1 for c in chains for item in c if isinstance(item, AstrFile))
         total = image_count + file_count
         if total > 0:
             parts: list[str] = []
@@ -151,7 +191,15 @@ class MdRenderPlugin(Star):
                 parts.append(f"表达式({self.cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
-        result.chain = merge_chain(chain, built)
+    @staticmethod
+    def _has_content(comps: list) -> bool:
+        """判断组件列表是否含实质内容（有非 Plain，或 Plain 文本非空白）。"""
+        for c in comps:
+            if not _is_plain(c):
+                return True
+            if (c.text or "").strip():
+                return True
+        return False
 
     async def terminate(self):
         """插件销毁。"""

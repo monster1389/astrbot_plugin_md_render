@@ -365,3 +365,45 @@ def _table_to_text(table: Table) -> str:
     for row in table.rows:
         lines.append("| " + " | ".join(_cell_text(c) for c in row) + " |")
     return "\n".join(lines)
+
+
+def group_segments(
+    segments: list[Any],
+    cfg: RenderConfig,
+) -> list[list[Any]]:
+    """按切分配置将 segments 分组为多条独立消息。
+
+    切分点有两类：
+      - 分隔线（分隔线=切分）：`---` 作为断点，本身不进入消息。
+      - 空行（连续换行=切分）：相邻纯文本段之间断开。
+
+    Args:
+        segments: parser.parse() 输出的片段列表。
+        cfg: 渲染配置。
+
+    Returns:
+        消息分组列表，每组为一段待独立发送的片段列表。
+    """
+    groups: list[list[Any]] = []
+    current: list[Any] = []
+    for seg in segments:
+        if isinstance(seg, Divider):
+            if cfg.divider_mode == "切分":
+                if current:
+                    groups.append(current)
+                    current = []
+                continue
+            current.append(seg)
+            continue
+        if (
+            cfg.blank_line_mode == "切分"
+            and current
+            and isinstance(current[-1], Segment)
+            and isinstance(seg, Segment)
+        ):
+            groups.append(current)
+            current = []
+        current.append(seg)
+    if current:
+        groups.append(current)
+    return groups
