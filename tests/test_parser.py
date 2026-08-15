@@ -163,7 +163,7 @@ class TestDivider:
         assert not any(isinstance(s, Divider) for s in segments)
 
     def test_divider_splits_correctly(self):
-        """分隔线正确分割段落，段尾 \\n\\n 由 build_chain 负责补充。"""
+        """分隔线正确分割段落。"""
         text = "上面\n\n---\n\n下面"
         segments = parse(text)
         assert len(segments) == 3

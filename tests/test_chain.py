@@ -103,7 +103,7 @@ class TestBuildChain:
         assert isinstance(result[0], Image)
 
     def test_divider_split_mode_consumes_divider(self):
-        """分隔线切分模式：去掉 ---，为前段补充 \\n\\n 以便 splitter 切分。"""
+        """分隔线切分模式：去掉 ---，不追加换行。"""
         from render.chain import build_chain
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
@@ -111,7 +111,7 @@ class TestBuildChain:
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
         assert len(result) == 2
         assert all(isinstance(c, Plain) for c in result)
-        assert result[0].text == "上\n\n"
+        assert result[0].text == "上"
         assert result[1].text == "下"
 
     def test_divider_noop_outputs_text(self):
@@ -136,8 +136,8 @@ class TestBuildChain:
         full = "".join(c.text for c in result)
         assert "前面\n\n---\n\n后面" in full
 
-    def test_divider_split_with_cleaning_preserves_separation(self):
-        """切分模式 + 清洗：Divider 两侧段落保留 \n\n 分隔，不会被 splitter 合并。"""
+    def test_divider_split_with_cleaning_no_trailing_newlines(self):
+        """切分模式 + 清洗：不追加换行，段尾干净。"""
         from render.chain import build_chain
 
         segments = [Segment(text="好，第一轮回顾 (。-`ω´-)\n\n"), Divider(), Segment(text="**测试 1：纯闲聊**")]
@@ -147,8 +147,7 @@ class TestBuildChain:
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert isinstance(result[1], Plain)
-        # 清洗保留末尾 \n\n，确保分割器能识别段落边界
-        assert result[0].text == "好，第一轮回顾 (。-`ω´-)\n\n"
+        assert result[0].text == "好，第一轮回顾 (。-`ω´-)"
         assert result[1].text == "测试 1：纯闲聊"
 
     @patch("render.chain.render_inline_expr")

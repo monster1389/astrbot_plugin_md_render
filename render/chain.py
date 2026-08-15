@@ -290,12 +290,6 @@ async def build_chain(
         elif isinstance(seg, Divider):
             if cfg.divider_mode == "不处理":
                 chain.append(Plain("\n\n---\n\n"))
-            elif chain and isinstance(chain[-1], Plain):
-                if not chain[-1].text.endswith("\n\n"):
-                    if not chain[-1].text.endswith("\n"):
-                        chain[-1].text += "\n\n"
-                    else:
-                        chain[-1].text += "\n"
         elif isinstance(seg, Segment):
             text = seg.text
             if clean_cfg is not None:
