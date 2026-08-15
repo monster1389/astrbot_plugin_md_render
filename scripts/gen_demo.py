@@ -24,8 +24,7 @@ def main():
         table_mode="渲染图像",
         expr_mode="渲染图像",
         divider_mode="不处理",
-        font_color="#9CDCFE",
-        bg_color="#1E1E1E",
+        blank_line_mode="不处理",
         temp_ttl=5,
     )
 
