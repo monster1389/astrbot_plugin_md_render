@@ -1,6 +1,6 @@
 """配置读取、颜色解析、字体发现、临时路径构建。
 
-导出: RenderConfig, CleanConfig, load_config, parse_color, get_font,
+导出: RenderConfig, CleanConfig, load_config, get_font,
       find_font_path, build_temp_path
 """
 from __future__ import annotations

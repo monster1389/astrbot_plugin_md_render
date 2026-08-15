@@ -75,8 +75,8 @@ RespondStage 发送最终 chain
 
 `render/utils.py` — `RenderConfig` dataclass + 四个工具函数：
 - `load_config(raw)` — 从 AstrBot 配置字典构造配置对象
-- `parse_color(value)` — 提取纯 hex 颜色
 - `find_font_path(data_dir)` — 发现可用中文字体，优先使用捆绑的更纱等宽黑体
+- `get_font(data_dir, size)` — 按字号缓存获取 PIL 字体对象
 - `build_temp_path(data_dir, prefix, ext)` — 在 temp/ 下建带时间戳的文件路径
 
 ### 模块
@@ -90,7 +90,7 @@ RespondStage 发送最终 chain
 | `render/chain.py` | async 并发组装，asyncio.gather 收集渲染结果，按原序构建消息链 |
 | `render/clean/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 + 纯文本清洗函数(clean_code_block/clean_table/clean_expr) |
 | `render/clean/temp_cleaner.py` | 周期性扫描 temp/，按配置存活时长删过期临时文件 |
-| `render/utils.py` | `RenderConfig` + `CleanConfig` dataclass + 配置加载/颜色解析/字体发现/临时路径 |
+| `render/utils.py` | `RenderConfig` + `CleanConfig` dataclass + 配置加载/字体发现/字体缓存/临时路径 |
 
 ### 关键 API
 
@@ -111,7 +111,7 @@ RespondStage 发送最终 chain
 - 表格：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件
 - 表达式：不处理 / 渲染图像 / 渲染且保留原文
 - 分隔线：不处理 / 切分
-- 字体颜色、背景颜色：多种预设
+- 连续换行：不处理 / 切分
 - 临时文件存活（分钟）：0=即时删除（默认），-1=永久保留
 
 **清洗**（`raw["清洗"]`）：
@@ -121,4 +121,4 @@ RespondStage 发送最终 chain
 
 ### 设计文档
 
-历史设计文档见 `docs/designs/`（如存在），注意部分内容可能过时，以当前代码为准。
+历史设计文档见 `docs/superpowers/`（如存在），注意部分内容可能过时，以当前代码为准。
