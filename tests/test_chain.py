@@ -15,6 +15,7 @@ def _make_cfg(**overrides):
         "table_mode": "不处理",
         "expr_mode": "不处理",
         "divider_mode": "不处理",
+        "blank_line_mode": "不处理",
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))
@@ -185,7 +186,7 @@ class TestBuildChain:
         cfg = RenderConfig(
             code_mode="渲染图像", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
-            temp_ttl=5,
+            blank_line_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
@@ -204,7 +205,7 @@ class TestBuildChain:
         cfg = RenderConfig(
             code_mode="渲染且保留原文", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
-            temp_ttl=5,
+            blank_line_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1")]
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))

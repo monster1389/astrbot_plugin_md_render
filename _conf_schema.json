@@ -32,6 +32,13 @@
         "options": ["不处理", "切分"],
         "default": "不处理"
       },
+      "连续换行": {
+        "type": "string",
+        "description": "连续换行",
+        "hint": "对空行（连续换行）的处理方式。'切分' 将段落各自独立成段。",
+        "options": ["不处理", "切分"],
+        "default": "不处理"
+      },
       "临时文件存活": {
         "type": "int",
         "description": "临时文件存活",

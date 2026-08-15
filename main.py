@@ -123,7 +123,7 @@ class MdRenderPlugin(Star):
             return
 
         # 解析 → 组装 chain
-        segments = parse(full_text)
+        segments = parse(full_text, split_blank_lines=(self.cfg.blank_line_mode == "切分"))
 
         # 检查是否需要处理
         has_elements = any(
@@ -131,7 +131,8 @@ class MdRenderPlugin(Star):
             for s in segments
         )
         needs_cleaning = self.clean_cfg is not None and any(vars(self.clean_cfg).values())
-        if not has_elements and not needs_cleaning:
+        needs_split = self.cfg.blank_line_mode == "切分" and len(segments) > 1
+        if not has_elements and not needs_cleaning and not needs_split:
             return
 
         built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)

@@ -42,6 +42,7 @@ class TestLoadConfig:
         assert render_cfg.table_mode == "渲染图像"
         assert render_cfg.expr_mode == "渲染图像"
         assert render_cfg.divider_mode == "不处理"
+        assert render_cfg.blank_line_mode == "不处理"
         assert render_cfg.temp_ttl == 0
         assert clean_cfg.bold is True
         assert clean_cfg.italic is True
@@ -61,6 +62,7 @@ class TestLoadConfig:
                 "表格": "渲染且保留原文",
                 "表达式": "渲染图像",
                 "分隔线": "渲染图像",
+                "连续换行": "切分",
                 "临时文件存活": 10,
             },
             "清洗": {
@@ -73,6 +75,7 @@ class TestLoadConfig:
         assert render_cfg.table_mode == "渲染且保留原文"
         assert render_cfg.expr_mode == "渲染图像"
         assert render_cfg.divider_mode == "渲染图像"
+        assert render_cfg.blank_line_mode == "切分"
         assert render_cfg.temp_ttl == 10
         assert clean_cfg.bold is False
         assert clean_cfg.italic is True
@@ -110,6 +113,7 @@ class TestRenderConfig:
             table_mode="渲染图像",
             expr_mode="渲染图像",
             divider_mode="不处理",
+            blank_line_mode="不处理",
             temp_ttl=5,
         )
         try:

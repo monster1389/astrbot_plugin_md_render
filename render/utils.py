@@ -55,12 +55,14 @@ class RenderConfig:
         table_mode: 表格处理模式。
         expr_mode: 数学表达式处理模式。
         divider_mode: 水平分割线处理模式。
+        blank_line_mode: 连续换行（空行）处理模式。
         temp_ttl: 临时文件存活分钟数。
     """
     code_mode: str
     table_mode: str
     expr_mode: str
     divider_mode: str
+    blank_line_mode: str
     temp_ttl: int
 
 
@@ -122,6 +124,7 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
         table_mode=render_raw.get("表格", "渲染图像"),
         expr_mode=render_raw.get("表达式", "渲染图像"),
         divider_mode=render_raw.get("分隔线", "不处理"),
+        blank_line_mode=render_raw.get("连续换行", "不处理"),
         temp_ttl=int(render_raw.get("临时文件存活", 0)),
     )
 

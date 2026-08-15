@@ -13,6 +13,7 @@ def _make_cfg(**overrides):
         "table_mode": "渲染图像",
         "expr_mode": "渲染图像",
         "divider_mode": "不处理",
+        "blank_line_mode": "不处理",
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))

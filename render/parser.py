@@ -224,6 +224,7 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
 
 def _split_hr_from_segments(
     segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider],
+    split_blank_lines: bool = False,
 ) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
     """后处理：从 Segment 文本中识别有空行包裹的分隔线，拆分为 Divider。
 
@@ -232,6 +233,8 @@ def _split_hr_from_segments(
 
     Args:
         segments: 初次解析后的片段列表。
+        split_blank_lines: 为 True 时，非分隔线段落按空行各自独立成
+            Segment 并丢弃段间 \\n\\n；为 False 时拼回单个 Segment。
 
     Returns:
         插入 Divider 后的片段列表。
@@ -242,6 +245,13 @@ def _split_hr_from_segments(
             result.append(seg)
             continue
         paragraphs = seg.text.split("\n\n")
+        if split_blank_lines:
+            for para in paragraphs:
+                if _HR_LINE_RE.match(para):
+                    result.append(Divider())
+                elif para.strip():
+                    result.append(Segment(text=para))
+            continue
         non_hr_parts: list[str] = []
         for para in paragraphs:
             if _HR_LINE_RE.match(para):
@@ -347,11 +357,12 @@ def extract_inline_content(
     return result
 
 
-def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
+def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
     """解析 markdown 文本，提取结构元素。
 
     Args:
         text: 原始 markdown 文本。
+        split_blank_lines: 为 True 时，空行分隔的普通段落各自独立成 Segment。
 
     Returns:
         解析后的结构元素列表，按文本出现顺序排列。
@@ -420,4 +431,4 @@ def parse(text: str) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExp
         i += 1
 
     flush_buf()
-    return _split_hr_from_segments(segments)
+    return _split_hr_from_segments(segments, split_blank_lines)

@@ -190,3 +190,47 @@ class TestMixed:
         assert len(segments) == 1
         assert isinstance(segments[0], Segment)
         assert not isinstance(segments[0], (CodeBlock, Table, InlineExpr, BlockExpr, Divider))
+
+
+class TestBlankLineSplit:
+    def test_split_blank_lines(self):
+        """空行切分：段落各自独立成 Segment，丢弃 \\n\\n。"""
+        text = "段落A\n\n段落B\n\n段落C"
+        segments = parse(text, split_blank_lines=True)
+        plains = [s for s in segments if isinstance(s, Segment)]
+        assert [s.text for s in plains] == ["段落A", "段落B", "段落C"]
+
+    def test_no_split_by_default(self):
+        """默认不切分：段落拼回单个 Segment，保留 \\n\\n。"""
+        text = "段落A\n\n段落B"
+        segments = parse(text)
+        assert len(segments) == 1
+        assert isinstance(segments[0], Segment)
+        assert segments[0].text == "段落A\n\n段落B\n\n"
+
+    def test_split_single_paragraph(self):
+        """无空行的单段文本：切分后仍是单个 Segment，丢弃段尾 \\n\\n。"""
+        text = "段落A"
+        segments = parse(text, split_blank_lines=True)
+        assert len(segments) == 1
+        assert isinstance(segments[0], Segment)
+        assert segments[0].text == "段落A"
+
+    def test_split_with_divider(self):
+        """空行切分 + 分隔线：--- 仍识别为 Divider，普通段落独立。"""
+        text = "段落A\n\n---\n\n段落B"
+        segments = parse(text, split_blank_lines=True)
+        assert len(segments) == 3
+        assert isinstance(segments[0], Segment)
+        assert isinstance(segments[1], Divider)
+        assert isinstance(segments[2], Segment)
+        assert segments[0].text == "段落A"
+        assert segments[2].text == "段落B"
+
+    def test_split_keeps_divider_blank_line_requirement(self):
+        """空行切分不改变 --- 判定：无空行包裹的 --- 仍是文本。"""
+        text = "上面\n---\n下面"
+        segments = parse(text, split_blank_lines=True)
+        assert not any(isinstance(s, Divider) for s in segments)
+        plain = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "---" in plain
