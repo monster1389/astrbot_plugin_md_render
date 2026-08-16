@@ -25,7 +25,7 @@ from render.parser import (
     parse,
 )
 from render.table import render_table
-from render.clean.md_cleaner import clean_markdown, clean_code_block, clean_table, clean_expr
+from render.clean.md_cleaner import clean_markdown
 from render.utils import RenderConfig, CleanConfig, build_temp_path
 
 logger = logging.getLogger(__name__)
@@ -58,18 +58,16 @@ _MODE_SPECS: dict[str, ModeSpec] = {
 
 @dataclass(frozen=True)
 class ElementSpec:
-    """元素类型的渲染与清洗配方。
+    """元素类型的渲染与文本配方。
 
     Attributes:
         render: 渲染函数，返回 PNG bytes。
-        to_text: 将 segment 还原为原始 markdown 文本。
-        clean: 清洗函数，自带配置开关判断，关闭时原样返回。
+        text: 将 segment 还原为文本：清洗开启时产精简纯文本，否则产 markdown 原文。
         prefix: 产物文件名前缀。
         supports_file: 是否支持产出 .md 文件。
     """
     render: Callable[[Any, str], bytes]
-    to_text: Callable[[Any], str]
-    clean: Callable[[str, CleanConfig], str]
+    text: Callable[[Any, CleanConfig | None], str]
     prefix: str
     supports_file: bool
 
@@ -77,29 +75,25 @@ class ElementSpec:
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
         render=lambda seg, dd: render_code(seg, dd),
-        to_text=lambda s: f"```{s.lang}\n{s.code}\n```",
-        clean=lambda t, cc: clean_code_block(t) if cc.code else t,
+        text=lambda seg, cc: seg.code if (cc and cc.code) else f"```{seg.lang}\n{seg.code}\n```",
         prefix="code",
         supports_file=True,
     ),
     Table: ElementSpec(
         render=lambda seg, dd: render_table(seg, dd),
-        to_text=lambda s: _table_to_text(s),
-        clean=lambda t, cc: clean_table(t) if cc.table else t,
+        text=lambda seg, cc: _table_to_plain(seg) if (cc and cc.table) else _table_to_text(seg),
         prefix="table",
         supports_file=True,
     ),
     InlineExpr: ElementSpec(
         render=lambda seg, dd: render_expr(seg),
-        to_text=lambda s: f"${s.expr}$",
-        clean=lambda t, cc: clean_expr(t) if cc.expr else t,
+        text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"${seg.expr}$",
         prefix="expr",
         supports_file=False,
     ),
     BlockExpr: ElementSpec(
         render=lambda seg, dd: render_expr(seg),
-        to_text=lambda s: f"$$\n{s.expr}\n$$",
-        clean=lambda t, cc: clean_expr(t) if cc.expr else t,
+        text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"$$\n{seg.expr}\n$$",
         prefix="expr",
         supports_file=False,
     ),
@@ -113,22 +107,6 @@ def _mode_for(seg: Any, cfg: RenderConfig) -> str:
     if isinstance(seg, Table):
         return cfg.table_mode
     return cfg.expr_mode  # InlineExpr / BlockExpr
-
-
-def _maybe_clean(raw_text: str, clean_cfg: CleanConfig | None, spec: ElementSpec) -> str:
-    """按元素配方清洗 markdown 标记，clean_cfg 为 None 时原样返回。
-
-    Args:
-        raw_text: 原始 markdown 文本。
-        clean_cfg: 清洗配置，为 None 时不清洗。
-        spec: 元素配方，其 clean 自带配置开关判断。
-
-    Returns:
-        清洗后或原始文本。
-    """
-    if clean_cfg is None:
-        return raw_text
-    return spec.clean(raw_text, clean_cfg)
 
 
 def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
@@ -185,19 +163,18 @@ def _dispatch(
     """
     spec = _ELEMENT_SPECS[type(seg)]
     recipe = _MODE_SPECS[_mode_for(seg, cfg)]
-    raw_text = spec.to_text(seg)
 
     # 渲染失败统一回退为原文
     if recipe.image and result is None:
-        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec)))
+        chain.append(Plain(spec.text(seg, clean_cfg)))
         return
 
     if recipe.text:
-        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec)))
+        chain.append(Plain(spec.text(seg, clean_cfg)))
     if recipe.image:
         _append_image(chain, result, spec.prefix, cfg, data_dir)
     if recipe.file and spec.supports_file:
-        _append_file(chain, raw_text, spec.prefix, data_dir)
+        _append_file(chain, spec.text(seg, None), spec.prefix, data_dir)
 
 
 async def build_chain(
@@ -278,8 +255,34 @@ def _is_plain(comp: Any) -> bool:
     )
 
 
+def _cell_text(cell: RichCell) -> str:
+    """将单元格按装饰顺序还原为 markdown 文本。
+
+    Args:
+        cell: 富文本单元格。
+
+    Returns:
+        还原的 markdown 文本。
+    """
+    parts: list[str] = []
+    for span in cell.spans:
+        s = span.text
+        if span.code:
+            s = f"`{s}`"
+        if span.strike:
+            s = f"~~{s}~~"
+        if span.italic:
+            s = f"*{s}*"
+        if span.bold:
+            s = f"**{s}**"
+        if span.link_url:
+            s = f"[{s}]({span.link_url})"
+        parts.append(s)
+    return "".join(parts)
+
+
 def _table_to_text(table: Table) -> str:
-    """将 Table 还原为原始 markdown 文本。
+    """将 Table 还原为 markdown 表格原文。
 
     Args:
         table: Table 实例。
@@ -287,28 +290,27 @@ def _table_to_text(table: Table) -> str:
     Returns:
         markdown 表格文本。
     """
-    def _cell_text(cell: RichCell) -> str:
-        parts: list[str] = []
-        for span in cell.spans:
-            s = span.text
-            if span.code:
-                s = f"`{s}`"
-            if span.strike:
-                s = f"~~{s}~~"
-            if span.italic:
-                s = f"*{s}*"
-            if span.bold:
-                s = f"**{s}**"
-            if span.link_url:
-                s = f"[{s}]({span.link_url})"
-            parts.append(s)
-        return "".join(parts)
-
     lines: list[str] = []
     lines.append("| " + " | ".join(_cell_text(h) for h in table.headers) + " |")
     lines.append("|" + "|".join(["---" for _ in table.headers]) + "|")
     for row in table.rows:
         lines.append("| " + " | ".join(_cell_text(c) for c in row) + " |")
+    return "\n".join(lines)
+
+
+def _table_to_plain(table: Table) -> str:
+    """将 Table 还原为精简纯文本：无外管、无分隔行。
+
+    Args:
+        table: Table 实例。
+
+    Returns:
+        以空格分隔的精简表格文本。
+    """
+    lines: list[str] = []
+    lines.append(" | ".join(_cell_text(h) for h in table.headers))
+    for row in table.rows:
+        lines.append(" | ".join(_cell_text(c) for c in row))
     return "\n".join(lines)
 
 

@@ -419,37 +419,65 @@ class TestBuildChainWithCleaning:
         assert result[0].text == "E=mc^2"
 
 
-class TestElementCleanRecipe:
-    """元素清洗配方：ElementSpec 自带 clean 字段，_maybe_clean 以 spec 为键。"""
+class TestElementTextRecipe:
+    """元素文本配方：ElementSpec.text(seg, cc) 一键产出纯文本或 markdown 原文。"""
 
-    def test_maybe_clean_takes_spec_and_honors_flag(self):
-        """_maybe_clean(raw, cfg, spec)：开启清洗、关闭清洗、None 三种情况。"""
-        from render.chain import _ELEMENT_SPECS, _maybe_clean
-        from render.parser import CodeBlock
-        from render.utils import CleanConfig
+    @staticmethod
+    def _table() -> Table:
+        return Table(
+            headers=[
+                RichCell(spans=[Span(text="名称")]),
+                RichCell(spans=[Span(text="版本")]),
+            ],
+            rows=[[
+                RichCell(spans=[Span(text="A")]),
+                RichCell(spans=[Span(text="v1")]),
+            ]],
+        )
 
-        spec = _ELEMENT_SPECS[CodeBlock]
-        raw = "```py\nx=1\n```"
-        assert _maybe_clean(raw, CleanConfig(code=True), spec) == "x=1"
-        assert _maybe_clean(raw, CleanConfig(code=False), spec) == raw
-        assert _maybe_clean(raw, None, spec) == raw
-
-    def test_each_element_spec_clean_self_contains_flag(self):
-        """每个元素配方的 clean 自己判断开关，开启清洗、关闭原样。"""
+    def test_code_recipe(self):
+        """代码块：清洗开→裸代码，关闭/None→markdown 围栏原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.parser import BlockExpr, CodeBlock, InlineExpr, Table
         from render.utils import CleanConfig
 
-        cases = [
-            (CodeBlock, "```py\nx=1\n```", {"code": True}, "x=1"),
-            (Table, "| A |\n|---|\n| 1 |", {"table": True}, "A\n1"),
-            (InlineExpr, "$x$", {"expr": True}, "x"),
-            (BlockExpr, "$$\nx\n$$", {"expr": True}, "x"),
-        ]
-        for type_, raw, flag, expected in cases:
-            spec = _ELEMENT_SPECS[type_]
-            assert spec.clean(raw, CleanConfig(**flag)) == expected
-            assert spec.clean(raw, CleanConfig(**{k: False for k in flag})) == raw
+        seg = CodeBlock(lang="py", code="x=1")
+        spec = _ELEMENT_SPECS[type(seg)]
+        assert spec.text(seg, CleanConfig(code=True)) == "x=1"
+        assert spec.text(seg, CleanConfig(code=False)) == "```py\nx=1\n```"
+        assert spec.text(seg, None) == "```py\nx=1\n```"
+
+    def test_table_recipe(self):
+        """表格：清洗开→无外管无分隔行，关闭/None→markdown 表格原文。"""
+        from render.chain import _ELEMENT_SPECS
+        from render.utils import CleanConfig
+
+        seg = self._table()
+        spec = _ELEMENT_SPECS[type(seg)]
+        assert spec.text(seg, CleanConfig(table=True)) == "名称 | 版本\nA | v1"
+        assert spec.text(seg, CleanConfig(table=False)) == "| 名称 | 版本 |\n|---|---|\n| A | v1 |"
+        assert spec.text(seg, None) == "| 名称 | 版本 |\n|---|---|\n| A | v1 |"
+
+    def test_inline_expr_recipe(self):
+        """行内表达式：清洗开→裸公式，关闭/None→$ 包裹原文。"""
+        from render.chain import _ELEMENT_SPECS
+        from render.utils import CleanConfig
+
+        seg = InlineExpr(expr="x")
+        spec = _ELEMENT_SPECS[type(seg)]
+        assert spec.text(seg, CleanConfig(expr=True)) == "x"
+        assert spec.text(seg, CleanConfig(expr=False)) == "$x$"
+        assert spec.text(seg, None) == "$x$"
+
+    def test_block_expr_recipe(self):
+        """块级表达式：清洗开→裸公式，关闭/None→$$ 包裹原文。"""
+        from render.chain import _ELEMENT_SPECS
+        from render.utils import CleanConfig
+
+        seg = BlockExpr(expr="x")
+        spec = _ELEMENT_SPECS[type(seg)]
+        assert spec.text(seg, CleanConfig(expr=True)) == "x"
+        assert spec.text(seg, CleanConfig(expr=False)) == "$$\nx\n$$"
+        assert spec.text(seg, None) == "$$\nx\n$$"
 
 
 class TestGroupSegments:
