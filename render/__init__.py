@@ -6,12 +6,3 @@ table  : Pillow 手绘表格。
 expr   : pillowlatex 渲染数学表达式。
 chain  : 异步并发组装消息链。
 """
-from render.parser import (  # noqa: E402, F401
-    BlockExpr,
-    CodeBlock,
-    Divider,
-    InlineExpr,
-    Segment,
-    Table,
-    parse,
-)
