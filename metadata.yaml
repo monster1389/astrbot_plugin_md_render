@@ -1,8 +1,14 @@
 name: astrbot_plugin_md_render
 display_name: Markdown 渲染
 desc: 将 QQ 消息中的 markdown 代码块、表格、数学表达式渲染为图片。
-version: v1.0.0
+version: v1.2.0
 author: monster1389
 repo: "https://github.com/monster1389/astrbot_plugin_md_render"
 support_platforms:
   - aiocqhttp
+tags:
+  - markdown
+  - 渲染
+  - 无浏览器
+  - 清洗
+  - 杀手

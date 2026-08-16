@@ -70,7 +70,7 @@ def _download_sarasa_font(fonts_dir: str) -> bool:
     "astrbot_plugin_md_render",
     "monster1389",
     "Markdown 渲染插件",
-    "1.1.0",
+    "1.2.0",
 )
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、表格、数学表达式渲染为图片。
