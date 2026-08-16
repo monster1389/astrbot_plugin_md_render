@@ -43,7 +43,8 @@ class TestLoadConfig:
         assert render_cfg.expr_mode == "渲染图像"
         assert render_cfg.divider_mode == "不处理"
         assert render_cfg.blank_line_mode == "不处理"
-        assert render_cfg.temp_ttl == 0
+        assert render_cfg.temp_ttl == 3
+        assert render_cfg.send_delay is True
         assert clean_cfg.bold is True
         assert clean_cfg.italic is True
         assert clean_cfg.strikethrough is True
@@ -63,6 +64,7 @@ class TestLoadConfig:
                 "表达式": "渲染图像",
                 "分隔线": "渲染图像",
                 "连续换行": "切分",
+                "发送延时": False,
                 "临时文件存活": 10,
             },
             "清洗": {
@@ -77,6 +79,7 @@ class TestLoadConfig:
         assert render_cfg.divider_mode == "渲染图像"
         assert render_cfg.blank_line_mode == "切分"
         assert render_cfg.temp_ttl == 10
+        assert render_cfg.send_delay is False
         assert clean_cfg.bold is False
         assert clean_cfg.italic is True
 

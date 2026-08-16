@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -157,7 +158,8 @@ class MdRenderPlugin(Star):
         for group_chain in built_groups[:-1]:
             if self._has_content(group_chain):
                 await self._send_chain(event, group_chain)
-                await asyncio.sleep(0.2)
+                if self.cfg.send_delay:
+                    await asyncio.sleep(random.uniform(1.0, 3.0))
 
         result.chain = built_groups[-1]
 

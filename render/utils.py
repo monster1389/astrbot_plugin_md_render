@@ -57,6 +57,7 @@ class RenderConfig:
         divider_mode: 水平分割线处理模式。
         blank_line_mode: 连续换行（空行）处理模式。
         temp_ttl: 临时文件存活分钟数。
+        send_delay: 切分后多条消息间是否随机延时（1~3 秒）防风控。
     """
     code_mode: str
     table_mode: str
@@ -64,6 +65,7 @@ class RenderConfig:
     divider_mode: str
     blank_line_mode: str
     temp_ttl: int
+    send_delay: bool = True
 
 
 @dataclass(frozen=True)
@@ -125,7 +127,8 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
         expr_mode=render_raw.get("表达式", "渲染图像"),
         divider_mode=render_raw.get("分隔线", "不处理"),
         blank_line_mode=render_raw.get("连续换行", "不处理"),
-        temp_ttl=int(render_raw.get("临时文件存活", 0)),
+        temp_ttl=int(render_raw.get("临时文件存活", 3)),
+        send_delay=bool(render_raw.get("发送延时", True)),
     )
 
     clean_cfg = CleanConfig(

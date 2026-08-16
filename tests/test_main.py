@@ -148,7 +148,7 @@ class TestSplitIntoMessages:
         event.unified_msg_origin = "napcat:FriendMessage:1"
 
         config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "切分", "连续换行": "不处理", "临时文件存活": 0},
+            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "切分", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
             "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
         }
         context = MagicMock()
@@ -173,7 +173,7 @@ class TestSplitIntoMessages:
         event.unified_msg_origin = "napcat:FriendMessage:1"
 
         config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "切分", "临时文件存活": 0},
+            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "切分", "发送延时": False, "临时文件存活": 0},
             "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
         }
         context = MagicMock()
@@ -188,3 +188,29 @@ class TestSplitIntoMessages:
         updated = event.get_result.return_value.chain
         text = "".join(c.text for c in updated)
         assert text.strip() == "第三段"
+
+    def test_split_delay_applied_when_enabled(self):
+        """发送延时=开时，前置消息之间应随机延时。"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        chain = [Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "切分", "连续换行": "不处理", "发送延时": True, "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        with patch('main.StarTools') as mock_tools, \
+                patch('main.asyncio.sleep', new=AsyncMock()) as mock_sleep, \
+                patch('main.random.uniform', return_value=1.5):
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = self._make_plugin(config, context)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        assert context.send_message.await_count == 2
+        assert mock_sleep.await_count == 2
+        mock_sleep.assert_awaited_with(1.5)
