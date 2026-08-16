@@ -534,3 +534,99 @@ class TestGroupSegments:
         groups = group_segments(segments, cfg)
         assert len(groups) == 1
         assert len(groups[0]) == 3
+
+
+class TestHasKeepOriginal:
+    def test_code_keep_original_true(self):
+        """代码块=渲染且保留原文 → True。"""
+        from render.chain import has_keep_original
+
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg) is True
+
+    def test_table_keep_original_true(self):
+        """表格=渲染且保留原文 → True。"""
+        from render.chain import has_keep_original
+
+        segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
+        cfg = _make_cfg(table_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg) is True
+
+    def test_expr_keep_original_true(self):
+        """表达式=渲染且保留原文 → True。"""
+        from render.chain import has_keep_original
+
+        segments = [InlineExpr(expr="E=mc^2")]
+        cfg = _make_cfg(expr_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg) is True
+
+    def test_block_expr_keep_original_true(self):
+        """块级表达式=渲染且保留原文 → True。"""
+        from render.chain import has_keep_original
+
+        segments = [BlockExpr(expr="\\int x dx")]
+        cfg = _make_cfg(expr_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg) is True
+
+    def test_render_image_only_false(self):
+        """渲染图像（无保留原文）→ False。"""
+        from render.chain import has_keep_original
+
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="渲染图像")
+        assert has_keep_original(segments, cfg) is False
+
+    def test_mixed_group_true_when_any_keep_original(self):
+        """分组内任一元素保留原文即 True。"""
+        from render.chain import has_keep_original
+
+        segments = [
+            CodeBlock(lang="py", code="x=1"),
+            Segment(text="普通文本"),
+        ]
+        cfg = _make_cfg(code_mode="渲染图像", table_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg) is False
+        cfg2 = _make_cfg(code_mode="渲染且保留原文")
+        assert has_keep_original(segments, cfg2) is True
+
+
+class TestSplitKeepOriginal:
+    def test_text_and_image_split(self):
+        """文本 + 图片 → [文本], [图片]，文本在前。"""
+        from render.chain import split_keep_original
+
+        chain = [Plain("原文"), Image.fromBytes(b"fake")]
+        result = split_keep_original(chain)
+        assert len(result) == 2
+        assert result[0] == [chain[0]]
+        assert result[1] == [chain[1]]
+
+    def test_text_only_no_split(self):
+        """仅文本（渲染失败回退）→ 单条，不拆。"""
+        from render.chain import split_keep_original
+
+        chain = [Plain("原文")]
+        result = split_keep_original(chain)
+        assert len(result) == 1
+        assert result[0] == chain
+
+    def test_media_only_no_split(self):
+        """仅媒体（无原文）→ 单条，不拆。"""
+        from render.chain import split_keep_original
+
+        chain = [Image.fromBytes(b"fake")]
+        result = split_keep_original(chain)
+        assert len(result) == 1
+        assert result[0] == chain
+
+    def test_preserves_internal_order(self):
+        """多组件时文本归文本、媒体归媒体，各自保持原顺序。"""
+        from render.chain import split_keep_original
+
+        a = Plain("A")
+        img1 = Image.fromBytes(b"1")
+        b = Plain("B")
+        f = AstrFile(name="x.md", file="/tmp/x.md")
+        result = split_keep_original([a, img1, b, f])
+        assert result == [[a, b], [img1, f]]

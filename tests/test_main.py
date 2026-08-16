@@ -214,3 +214,39 @@ class TestSplitIntoMessages:
         assert context.send_message.await_count == 2
         assert mock_sleep.await_count == 2
         mock_sleep.assert_awaited_with(1.5)
+
+
+class TestKeepOriginalSplit:
+    def test_keep_original_splits_text_and_image(self):
+        """渲染且保留原文：原文切分为前置文本消息，图片留在末段。"""
+        from unittest.mock import AsyncMock, MagicMock
+        from main import MdRenderPlugin
+        from render.utils import load_config
+
+        chain = [Plain("```py\nx=1\n```")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "渲染且保留原文", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        with patch('main.StarTools') as mock_tools, \
+                patch('render.chain.render_code', return_value=(b"fake_png", "```py\nx=1\n```")):
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = MdRenderPlugin(context=context, config=config)
+            plugin.cfg, plugin.clean_cfg = load_config(config)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        # 前置文本消息已独立发送，末段为图片
+        assert context.send_message.await_count == 1
+        sent_chain = context.send_message.call_args[0][1].chain
+        assert len(sent_chain) == 1
+        assert "x=1" in sent_chain[0].text
+
+        updated = event.get_result.return_value.chain
+        assert len(updated) == 1
+        assert updated[0].data == b"fake_png"

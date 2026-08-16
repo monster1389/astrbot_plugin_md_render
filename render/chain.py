@@ -407,3 +407,43 @@ def group_segments(
     if current:
         groups.append(current)
     return groups
+
+
+def has_keep_original(segments: list[Any], cfg: RenderConfig) -> bool:
+    """判断分组内是否存在「渲染且保留原文」的元素。
+
+    Args:
+        segments: 单个消息分组的 segment 列表。
+        cfg: 渲染配置。
+
+    Returns:
+        True 表示该分组内有元素启用了「渲染且保留原文」。
+    """
+    for seg in segments:
+        if isinstance(seg, CodeBlock) and "保留原文" in cfg.code_mode:
+            return True
+        if isinstance(seg, Table) and "保留原文" in cfg.table_mode:
+            return True
+        if isinstance(seg, (InlineExpr, BlockExpr)) and "保留原文" in cfg.expr_mode:
+            return True
+    return False
+
+
+def split_keep_original(chain: list[Any]) -> list[list[Any]]:
+    """将含「保留原文」的消息链拆成 [文本消息, 媒体消息]。
+
+    文本（Plain）前置，图片/文件后置。无媒体时不拆，直接返回单条。
+
+    Args:
+        chain: build_chain 构建的扁平组件列表。
+
+    Returns:
+        一条或两条消息组件列表。
+    """
+    text = [c for c in chain if _is_plain(c)]
+    media = [c for c in chain if not _is_plain(c)]
+    if not media:
+        return [chain]
+    if not text:
+        return [media]
+    return [text, media]

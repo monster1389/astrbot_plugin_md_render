@@ -17,6 +17,10 @@ if "astrbot" not in sys.modules:
         def warning(msg: str, *args, **kwargs) -> None:
             pass
 
+        @staticmethod
+        def info(msg: str, *args, **kwargs) -> None:
+            pass
+
     _astrbot_api.logger = _MockLogger()
     _astrbot.api = _astrbot_api
     sys.modules["astrbot"] = _astrbot

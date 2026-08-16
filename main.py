@@ -27,7 +27,13 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
-from render.chain import build_chain, group_segments, merge_chain, _is_plain  # noqa: E402
+from render.chain import (  # noqa: E402
+    _is_plain,
+    build_chain,
+    group_segments,
+    has_keep_original,
+    split_keep_original,
+)
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
@@ -143,27 +149,29 @@ class MdRenderPlugin(Star):
         groups = group_segments(segments, self.cfg)
         non_plain = [c for c in chain if not _is_plain(c)]
 
-        if len(groups) == 1:
-            built = await build_chain(segments, self.cfg, self.clean_cfg, data_dir)
-            self._log_render_summary([built])
-            result.chain = merge_chain(chain, built)
-            return
-
         built_groups = list(await asyncio.gather(
             *(build_chain(g, self.cfg, self.clean_cfg, data_dir) for g in groups)
         ))
-        self._log_render_summary(built_groups)
+
+        messages: list[list] = []
+        for g, built in zip(groups, built_groups):
+            if has_keep_original(g, self.cfg):
+                messages.extend(split_keep_original(built))
+            else:
+                messages.append(built)
 
         if non_plain:
-            built_groups[0] = non_plain + built_groups[0]
+            messages[0] = non_plain + messages[0]
 
-        for group_chain in built_groups[:-1]:
-            if self._has_content(group_chain):
-                await self._send_chain(event, group_chain)
+        self._log_render_summary(messages)
+
+        for message_chain in messages[:-1]:
+            if self._has_content(message_chain):
+                await self._send_chain(event, message_chain)
                 if self.cfg.send_delay:
                     await asyncio.sleep(random.uniform(1.0, 3.0))
 
-        result.chain = built_groups[-1]
+        result.chain = messages[-1]
 
     async def _send_chain(self, event: AstrMessageEvent, comps: list) -> None:
         """将组件列表作为一条独立消息发送。
