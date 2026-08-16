@@ -13,21 +13,19 @@ from pygments import highlight
 from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer
 
-from render.utils import RenderConfig, find_font_path
+from render.utils import find_font_path
 
 logger = logging.getLogger(__name__)
 
 
 def render_code(
     codeblock: object,
-    cfg: RenderConfig,
     data_dir: str,
 ) -> bytes:
     """渲染代码块为 PNG 图片。
 
     Args:
         codeblock: CodeBlock 实例，含 lang 和 code 属性。
-        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
 
     Returns:

@@ -1,22 +1,8 @@
 """表达式渲染测试。"""
 from unittest.mock import MagicMock, patch
 
-from render.expr import render_inline_expr, render_block_expr
+from render.expr import render_expr
 from render.parser import BlockExpr, InlineExpr
-from render.utils import RenderConfig
-
-
-def _make_cfg(**overrides):
-    """构造测试用 RenderConfig。"""
-    defaults = {
-        "code_mode": "渲染且txt",
-        "table_mode": "渲染图像",
-        "expr_mode": "渲染图像",
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
-        "temp_ttl": 5,
-    }
-    return RenderConfig(**(defaults | overrides))
 
 
 class TestRenderExpr:
@@ -38,9 +24,7 @@ class TestRenderExpr:
         mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
-        expr = InlineExpr(expr="E=mc^2")
-        cfg = _make_cfg()
-        png_bytes = render_inline_expr(expr, cfg, data_dir="/tmp")
+        png_bytes = render_expr(InlineExpr(expr="E=mc^2"))
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
@@ -66,9 +50,7 @@ class TestRenderExpr:
         mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
-        expr = BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1")
-        cfg = _make_cfg()
-        png_bytes = render_block_expr(expr, cfg, data_dir="/tmp")
+        png_bytes = render_expr(BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1"))
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0

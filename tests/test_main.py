@@ -244,7 +244,7 @@ class TestInterleavedSplit:
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        def _fake_render(seg, cfg, data_dir):
+        def _fake_render(seg, data_dir):
             return b"png_" + seg.code.encode()
 
         with patch('main.StarTools') as mock_tools, \

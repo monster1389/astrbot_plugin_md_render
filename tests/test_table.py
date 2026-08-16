@@ -2,19 +2,6 @@
 from unittest.mock import MagicMock, patch
 
 from render.parser import RichCell, Span, Table
-from render.utils import RenderConfig
-
-
-def _make_cfg(**overrides):
-    defaults = {
-        "code_mode": "渲染且txt",
-        "table_mode": "渲染图像",
-        "expr_mode": "渲染图像",
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
-        "temp_ttl": 5,
-    }
-    return RenderConfig(**(defaults | overrides))
 
 
 def _cell(text: str) -> RichCell:
@@ -42,10 +29,9 @@ class TestRenderTable:
             headers=[_cell("姓名"), _cell("年龄")],
             rows=[[_cell("张三"), _cell("20")], [_cell("李四"), _cell("25")]],
         )
-        cfg = _make_cfg()
 
         from render.table import render_table
-        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, data_dir="/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
@@ -68,10 +54,9 @@ class TestRenderTable:
         mock_img.save.side_effect = save_side_effect
 
         tbl = Table(headers=[_cell("A")], rows=[])
-        cfg = _make_cfg()
 
         from render.table import render_table
-        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, data_dir="/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
@@ -102,10 +87,9 @@ class TestRenderTable:
                 ]
             ],
         )
-        cfg = _make_cfg()
 
         from render.table import render_table
-        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, data_dir="/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
@@ -139,10 +123,9 @@ class TestRenderTable:
                 ])],
             ],
         )
-        cfg = _make_cfg()
 
         from render.table import render_table
-        png_bytes = render_table(tbl, cfg, data_dir="/tmp")
+        png_bytes = render_table(tbl, data_dir="/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0

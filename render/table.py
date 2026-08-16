@@ -9,7 +9,7 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 
 from render.parser import RichCell, Span, Table
-from render.utils import RenderConfig, get_font
+from render.utils import get_font
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +35,12 @@ _STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩�
 
 def render_table(
     table: Table,
-    cfg: RenderConfig,
     data_dir: str,
 ) -> bytes:
     """渲染表格为 PNG 图片。
 
     Args:
         table: Table 实例，含 headers 和 rows 属性（均为 RichCell）。
-        cfg: 渲染配置。
         data_dir: 插件数据目录路径。
 
     Returns:

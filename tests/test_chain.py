@@ -151,7 +151,7 @@ class TestBuildChain:
         assert result[0].text == "好，第一轮回顾 (。-`ω´-)"
         assert result[1].text == "测试 1：纯闲聊"
 
-    @patch("render.chain.render_inline_expr")
+    @patch("render.chain.render_expr")
     def test_inline_expr_render_image(self, mock_render):
         """行内表达式渲染图像模式。"""
         from render.chain import build_chain
@@ -163,7 +163,7 @@ class TestBuildChain:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    @patch("render.chain.render_block_expr")
+    @patch("render.chain.render_expr")
     def test_block_expr_noop(self, mock_render):
         """块级表达式不处理：还原为 markdown 原文。"""
         from render.chain import build_chain
@@ -279,7 +279,7 @@ class TestBuildChain:
         assert hasattr(img, "data") and img.data == b"fake_png_data"
         assert not hasattr(img, "file")
 
-    @patch("render.chain.render_inline_expr")
+    @patch("render.chain.render_expr")
     def test_expr_zero_ttl_uses_frombytes(self, mock_render):
         """temp_ttl=0 时表达式用 Image.fromBytes，不走文件落盘。"""
         from render.chain import build_chain

@@ -13,7 +13,7 @@ from typing import Any, Callable
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.code import render_code
-from render.expr import render_block_expr, render_inline_expr
+from render.expr import render_expr
 from render.parser import (
     BlockExpr,
     CodeBlock,
@@ -75,28 +75,28 @@ class ElementSpec:
 
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
-        render=lambda seg, cfg, dd: render_code(seg, cfg, dd),
+        render=lambda seg, dd: render_code(seg, dd),
         to_text=lambda s: f"```{s.lang}\n{s.code}\n```",
         clean_key="code",
         prefix="code",
         supports_file=True,
     ),
     Table: ElementSpec(
-        render=lambda seg, cfg, dd: render_table(seg, cfg, dd),
+        render=lambda seg, dd: render_table(seg, dd),
         to_text=lambda s: _table_to_text(s),
         clean_key="table",
         prefix="table",
         supports_file=True,
     ),
     InlineExpr: ElementSpec(
-        render=lambda seg, cfg, dd: render_inline_expr(seg, cfg, dd),
+        render=lambda seg, dd: render_expr(seg),
         to_text=lambda s: f"${s.expr}$",
         clean_key="expr",
         prefix="expr",
         supports_file=False,
     ),
     BlockExpr: ElementSpec(
-        render=lambda seg, cfg, dd: render_block_expr(seg, cfg, dd),
+        render=lambda seg, dd: render_expr(seg),
         to_text=lambda s: f"$$\n{s.expr}\n$$",
         clean_key="expr",
         prefix="expr",
@@ -112,24 +112,6 @@ def _mode_for(seg: Any, cfg: RenderConfig) -> str:
     if isinstance(seg, Table):
         return cfg.table_mode
     return cfg.expr_mode  # InlineExpr / BlockExpr
-
-
-def _make_render_fn(seg: Any, cfg: RenderConfig, data_dir: str):
-    """构造无参渲染函数，供 asyncio.to_thread 调用。
-
-    Args:
-        seg: 待渲染的 segment。
-        cfg: 渲染配置。
-        data_dir: 插件数据目录路径。
-
-    Returns:
-        无参可调用对象，返回 PNG bytes。
-    """
-    render = _ELEMENT_SPECS[type(seg)].render
-
-    def _fn():
-        return render(seg, cfg, data_dir)
-    return _fn
 
 
 _CLEAN_FLAGS: dict[str, Callable[[CleanConfig], bool]] = {
@@ -255,9 +237,8 @@ async def build_chain(
         if type(seg) not in _ELEMENT_SPECS:
             continue
         if _MODE_SPECS[_mode_for(seg, cfg)].image:
-            fn = _make_render_fn(seg, cfg, data_dir)
             indices.append(i)
-            coros.append(asyncio.to_thread(fn))
+            coros.append(asyncio.to_thread(_ELEMENT_SPECS[type(seg)].render, seg, data_dir))
 
     # 并发执行
     if coros:
