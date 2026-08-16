@@ -31,8 +31,8 @@ from render.chain import (  # noqa: E402
     _is_plain,
     build_chain,
     group_segments,
-    has_keep_original,
-    split_keep_original,
+    has_media,
+    split_messages,
 )
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
@@ -154,11 +154,8 @@ class MdRenderPlugin(Star):
         ))
 
         messages: list[list] = []
-        for g, built in zip(groups, built_groups):
-            if has_keep_original(g, self.cfg):
-                messages.extend(split_keep_original(built))
-            else:
-                messages.append(built)
+        for built in built_groups:
+            messages.extend(split_messages(built))
 
         if non_plain:
             messages[0] = non_plain + messages[0]
@@ -169,7 +166,11 @@ class MdRenderPlugin(Star):
             if self._has_content(message_chain):
                 await self._send_chain(event, message_chain)
                 if self.cfg.send_delay:
-                    await asyncio.sleep(random.uniform(1.0, 3.0))
+                    # 图片/文件间隔 1~3s 防风控；纯文本间隔短一些
+                    if has_media(message_chain):
+                        await asyncio.sleep(random.uniform(1.0, 3.0))
+                    else:
+                        await asyncio.sleep(random.uniform(0.3, 1.0))
 
         result.chain = messages[-1]
 

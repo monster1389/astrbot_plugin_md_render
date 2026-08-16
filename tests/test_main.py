@@ -250,3 +250,82 @@ class TestKeepOriginalSplit:
         updated = event.get_result.return_value.chain
         assert len(updated) == 1
         assert updated[0].data == b"fake_png"
+
+
+class TestInterleavedSplit:
+    def test_interleaved_components_split_in_order(self):
+        """多个交错元素按组件逐条拆发，保持阅读顺序。"""
+        from unittest.mock import AsyncMock, MagicMock
+        from main import MdRenderPlugin
+        from render.utils import load_config
+
+        chain = [Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "渲染且保留原文", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        def _fake_render(seg, cfg, data_dir):
+            return (b"png_" + seg.code.encode(), f"```{seg.lang}\n{seg.code}\n```")
+
+        with patch('main.StarTools') as mock_tools, \
+                patch('render.chain.render_code', side_effect=_fake_render):
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = MdRenderPlugin(context=context, config=config)
+            plugin.cfg, plugin.clean_cfg = load_config(config)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        # 4 条前置独立发送：正文 / 代码1原文 / 图1 / 代码2原文；末段为图2
+        assert context.send_message.await_count == 4
+        sent = [c.args[1].chain for c in context.send_message.await_args_list]
+        assert sent[0][0].text.strip() == "正文第一行"
+        assert "x=1" in sent[1][0].text
+        assert sent[2][0].data == b"png_x=1"
+        assert "y=2" in sent[3][0].text
+
+        updated = event.get_result.return_value.chain
+        assert len(updated) == 1
+        assert updated[0].data == b"png_y=2"
+
+    def test_two_tier_delay(self):
+        """发送延时=开：文本消息 0.3~1s，含媒体消息 1~3s。"""
+        from unittest.mock import AsyncMock, MagicMock
+        from main import MdRenderPlugin
+        from render.utils import load_config
+
+        chain = [Plain("```py\nx=1\n```\n\n尾段文本")]
+        event = _make_event(chain)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+
+        config = {
+            "渲染": {"代码块": "渲染且保留原文", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "不处理", "发送延时": True, "临时文件存活": 0},
+            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
+        }
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        ranges: list[tuple] = []
+
+        def _uniform(a, b):
+            ranges.append((a, b))
+            return 1.0
+
+        def _fake_render(seg, cfg, data_dir):
+            return (b"png", f"```{seg.lang}\n{seg.code}\n```")
+
+        with patch('main.StarTools') as mock_tools, \
+                patch('render.chain.render_code', side_effect=_fake_render), \
+                patch('main.random.uniform', side_effect=_uniform), \
+                patch('main.asyncio.sleep', new=AsyncMock()):
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = MdRenderPlugin(context=context, config=config)
+            plugin.cfg, plugin.clean_cfg = load_config(config)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        # 前置两条：代码原文(文本) → 0.3~1s；渲染图(媒体) → 1~3s；末段尾段文本
+        assert ranges == [(0.3, 1.0), (1.0, 3.0)]
