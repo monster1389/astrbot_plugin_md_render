@@ -1,9 +1,9 @@
-"""on_decorating_result 事件处理测试。"""
+"""on_decorating_result 事件处理测试：管线接入的薄接线测试。"""
 import asyncio
 import sys
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -12,22 +12,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _star = types.ModuleType("astrbot.api.star")
 
+
 class _MockContext:
     pass
+
 
 class _MockStar:
     def __init__(self, context=None):
         self.context = context
+
 
 class _MockStarTools:
     @staticmethod
     def get_data_dir(name: str) -> str:
         return "/tmp/test_md_render"
 
+
 def _register(*args, **kwargs):
     def decorator(cls):
         return cls
     return decorator
+
 
 _star.Context = _MockContext
 _star.Star = _MockStar
@@ -37,6 +42,7 @@ sys.modules["astrbot.api.star"] = _star
 
 _event = types.ModuleType("astrbot.api.event")
 
+
 class _MockFilter:
     @staticmethod
     def on_decorating_result(priority=1000):
@@ -44,8 +50,10 @@ class _MockFilter:
             return fn
         return decorator
 
+
 class _MockAstrMessageEvent:
     pass
+
 
 class _MockMessageChain:
     def __init__(self):
@@ -61,11 +69,7 @@ sys.modules["astrbot.api.event"] = _event
 import astrbot.api  # noqa: E402
 astrbot.api.AstrBotConfig = dict
 
-
-# 符合 main.py 中 type(comp).__name__ == "Plain" 检查的 Plain 桩
-Plain = type('Plain', (), {
-    '__init__': lambda self, text="": setattr(self, 'text', text or ""),
-})
+from astrbot.api.message_components import Plain  # noqa: E402
 
 
 def _make_event(chain: list):
@@ -77,191 +81,84 @@ def _make_event(chain: list):
     return event
 
 
-class TestOnDecoratingResultWithoutRenderableElements:
-    """无代码块/表格/表达式时，仍应对纯文本执行清洗。"""
+def _make_plugin(context: MagicMock):
+    """构造插件实例，cfg 用 MagicMock、clean_cfg 置 None。"""
+    from main import MdRenderPlugin
 
-    def test_cleans_markdown_when_no_renderable_elements(self):
-        """**加粗** 和 > 引用应在清洗后去除，即使没有任何渲染元素。"""
-        from main import MdRenderPlugin
-        from render.utils import load_config
-
-        chain = [Plain("**先让...所有人**\n\n> 1%\n\n**立刻回滚**")]
-        event = _make_event(chain)
-
-        config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "临时文件存活": 0},
-            "清洗": {"加粗": True, "引用": True},
-        }
-
-        with patch('main.StarTools') as mock_tools:
-            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = MdRenderPlugin(context=MagicMock(), config=config)
-            plugin.cfg, plugin.clean_cfg = load_config(config)
-
-            asyncio.run(plugin.on_decorating_result(event))
-
-            updated = event.get_result.return_value.chain
-            text = "".join(c.text for c in updated)
-            assert "**" not in text, f"加粗标记应被去除: {text}"
-            assert "> " not in text, f"引用标记应被去除: {text}"
-
-    def test_skips_when_no_renderable_and_cleaning_disabled(self):
-        """无渲染元素且清洗全关时，应跳过（原文不变）。"""
-        from main import MdRenderPlugin
-        from render.utils import load_config
-
-        chain = [Plain("**原文保留**")]
-        event = _make_event(chain)
-
-        config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "临时文件存活": 0},
-            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
-        }
-
-        with patch('main.StarTools') as mock_tools:
-            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = MdRenderPlugin(context=MagicMock(), config=config)
-            plugin.cfg, plugin.clean_cfg = load_config(config)
-
-            asyncio.run(plugin.on_decorating_result(event))
-
-            updated = event.get_result.return_value.chain
-            text = "".join(c.text for c in updated)
-            assert "**" in text, "清洗全关时原文应保留不变"
+    plugin = MdRenderPlugin(context=context, config={})
+    plugin.cfg = MagicMock()
+    plugin.clean_cfg = None
+    return plugin
 
 
-class TestSplitIntoMessages:
-    def _make_plugin(self, config, context):
-        from main import MdRenderPlugin
-        from render.utils import load_config
+class TestProcessChainWiring:
+    """on_decorating_result 只负责接线：process_chain 与 deliver 两处 seam。"""
 
-        plugin = MdRenderPlugin(context=context, config=config)
-        plugin.cfg, plugin.clean_cfg = load_config(config)
-        return plugin
-
-    def test_divider_split_sends_front_segments(self):
-        """分隔线=切分：前置段逐条 send，末段留在 result.chain。"""
-        from unittest.mock import AsyncMock, MagicMock
-
-        chain = [Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")]
+    def test_returns_early_when_process_chain_none(self):
+        """process_chain 返回 None → 原样保留，不交付、不发送。"""
+        chain = [Plain("**加粗**")]
         event = _make_event(chain)
         event.unified_msg_origin = "napcat:FriendMessage:1"
-
-        config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "切分", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
-            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
-        }
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch('main.StarTools') as mock_tools:
+        with patch("main.process_chain", AsyncMock(return_value=None)) as mock_pc, \
+                patch("main.deliver", AsyncMock()) as mock_deliver, \
+                patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = self._make_plugin(config, context)
+            plugin = _make_plugin(context)
             asyncio.run(plugin.on_decorating_result(event))
 
-        assert context.send_message.await_count == 2
-        updated = event.get_result.return_value.chain
-        text = "".join(c.text for c in updated)
-        assert text.strip() == "第三段"
+        assert mock_pc.await_count == 1
+        mock_deliver.assert_not_awaited()
+        context.send_message.assert_not_awaited()
+        assert event.get_result.return_value.chain is chain
 
-    def test_blank_line_split_sends_front_segments(self):
-        """连续换行=切分：空行分隔的段落逐条 send，末段留在 result.chain。"""
-        from unittest.mock import AsyncMock, MagicMock
-
-        chain = [Plain("第一段\n\n第二段\n\n第三段")]
-        event = _make_event(chain)
+    def test_delivers_with_process_chain_messages(self):
+        """process_chain 返回消息 → deliver 收尾，result.chain 取其返回。"""
+        messages = [[Plain("前置")], [Plain("尾条")]]
+        tail = [Plain("尾条")]
+        original_chain = [Plain("原文")]
+        event = _make_event(original_chain)
         event.unified_msg_origin = "napcat:FriendMessage:1"
-
-        config = {
-            "渲染": {"代码块": "不处理", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "切分", "发送延时": False, "临时文件存活": 0},
-            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
-        }
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch('main.StarTools') as mock_tools:
+        cfg = MagicMock()
+
+        with patch("main.process_chain", AsyncMock(return_value=messages)) as mock_pc, \
+                patch("main.deliver", AsyncMock(return_value=tail)) as mock_deliver, \
+                patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = self._make_plugin(config, context)
+            plugin = _make_plugin(context)
+            plugin.cfg = cfg
             asyncio.run(plugin.on_decorating_result(event))
 
-        assert context.send_message.await_count == 2
-        updated = event.get_result.return_value.chain
-        text = "".join(c.text for c in updated)
-        assert text.strip() == "第三段"
+        mock_pc.assert_awaited_once_with(
+            original_chain, cfg, None, "/tmp/test_md_render"
+        )
+        assert mock_deliver.await_count == 1
+        assert mock_deliver.await_args[0][1] is messages
+        assert mock_deliver.await_args[0][2] is cfg
+        assert event.get_result.return_value.chain is tail
 
-
-class TestKeepOriginalSplit:
-    def test_keep_original_splits_text_and_image(self):
-        """渲染且保留原文：原文切分为前置文本消息，图片留在末段。"""
-        from unittest.mock import AsyncMock, MagicMock
-        from main import MdRenderPlugin
-        from render.utils import load_config
-
-        chain = [Plain("```py\nx=1\n```")]
-        event = _make_event(chain)
+    def test_send_callback_routes_to_context(self):
+        """deliver 收到的 send 回调经 context.send_message 发送。"""
+        event = _make_event([Plain("原文")])
         event.unified_msg_origin = "napcat:FriendMessage:1"
-
-        config = {
-            "渲染": {"代码块": "渲染且保留原文", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
-            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
-        }
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch('main.StarTools') as mock_tools, \
-                patch('render.chain.render_code', return_value=b"fake_png"):
+        with patch("main.process_chain", AsyncMock(return_value=[[Plain("a")]])), \
+                patch("main.deliver", AsyncMock(return_value=[Plain("a")])) as mock_deliver, \
+                patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = MdRenderPlugin(context=context, config=config)
-            plugin.cfg, plugin.clean_cfg = load_config(config)
+            plugin = _make_plugin(context)
             asyncio.run(plugin.on_decorating_result(event))
 
-        # 前置文本消息已独立发送，末段为图片
-        assert context.send_message.await_count == 1
-        sent_chain = context.send_message.call_args[0][1].chain
-        assert len(sent_chain) == 1
-        assert "x=1" in sent_chain[0].text
+            send_fn = mock_deliver.await_args[0][0]
+            asyncio.run(send_fn([Plain("发送")]))
 
-        updated = event.get_result.return_value.chain
-        assert len(updated) == 1
-        assert updated[0].data == b"fake_png"
-
-
-class TestInterleavedSplit:
-    def test_interleaved_components_split_in_order(self):
-        """多个交错元素按组件逐条拆发，保持阅读顺序。"""
-        from unittest.mock import AsyncMock, MagicMock
-        from main import MdRenderPlugin
-        from render.utils import load_config
-
-        chain = [Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")]
-        event = _make_event(chain)
-        event.unified_msg_origin = "napcat:FriendMessage:1"
-
-        config = {
-            "渲染": {"代码块": "渲染且保留原文", "表格": "不处理", "表达式": "不处理", "分隔线": "不处理", "连续换行": "不处理", "发送延时": False, "临时文件存活": 0},
-            "清洗": {"加粗": False, "斜体": False, "删除线": False, "行内代码": False, "链接": False, "标题": False, "列表标记（无序）": False, "列表标记（有序）": False, "引用": False, "图片": False},
-        }
-        context = MagicMock()
-        context.send_message = AsyncMock()
-
-        def _fake_render(seg, data_dir):
-            return b"png_" + seg.code.encode()
-
-        with patch('main.StarTools') as mock_tools, \
-                patch('render.chain.render_code', side_effect=_fake_render):
-            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
-            plugin = MdRenderPlugin(context=context, config=config)
-            plugin.cfg, plugin.clean_cfg = load_config(config)
-            asyncio.run(plugin.on_decorating_result(event))
-
-        # 4 条前置独立发送：正文 / 代码1原文 / 图1 / 代码2原文；末段为图2
-        assert context.send_message.await_count == 4
-        sent = [c.args[1].chain for c in context.send_message.await_args_list]
-        assert sent[0][0].text.strip() == "正文第一行"
-        assert "x=1" in sent[1][0].text
-        assert sent[2][0].data == b"png_x=1"
-        assert "y=2" in sent[3][0].text
-
-        updated = event.get_result.return_value.chain
-        assert len(updated) == 1
-        assert updated[0].data == b"png_y=2"
+        origin, mc = context.send_message.await_args.args
+        assert origin == "napcat:FriendMessage:1"
+        assert mc.chain[0].text == "发送"

@@ -25,15 +25,9 @@ _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
-from render.chain import (  # noqa: E402
-    _is_plain,
-    assemble_messages,
-    build_chain,
-    group_segments,
-)
+from render.chain import process_chain  # noqa: E402
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.deliver import deliver  # noqa: E402
-from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
 # 国内直连 GitHub 不稳定，gh-proxy 镜像前置兜底
@@ -114,45 +108,11 @@ class MdRenderPlugin(Star):
             event: AstrBot 消息事件。
         """
         result = event.get_result()
-        chain = result.chain
-        if not chain:
-            return
-
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
 
-        # 收集所有 Plain 文本，拼接后统一解析
-        text_parts: list[str] = []
-        for comp in chain:
-            if _is_plain(comp):
-                text_parts.append(comp.text or "")
-
-        full_text = "\n".join(text_parts)
-        if not full_text.strip():
+        messages = await process_chain(result.chain, self.cfg, self.clean_cfg, data_dir)
+        if messages is None:
             return
-
-        # 解析 → 按切分配置分组
-        segments = parse(full_text, split_blank_lines=(self.cfg.blank_line_mode == "切分"))
-
-        has_elements = any(
-            isinstance(s, (CodeBlock, Table, InlineExpr, BlockExpr, Divider))
-            for s in segments
-        )
-        needs_cleaning = self.clean_cfg is not None and any(vars(self.clean_cfg).values())
-        needs_split = (
-            (self.cfg.blank_line_mode == "切分" or self.cfg.divider_mode == "切分")
-            and len(segments) > 1
-        )
-        if not has_elements and not needs_cleaning and not needs_split:
-            return
-
-        groups = group_segments(segments, self.cfg)
-        non_plain = [c for c in chain if not _is_plain(c)]
-
-        built_groups = list(await asyncio.gather(
-            *(build_chain(g, self.cfg, self.clean_cfg, data_dir) for g in groups)
-        ))
-
-        messages = assemble_messages(built_groups, non_plain)
 
         self._log_render_summary(messages)
 

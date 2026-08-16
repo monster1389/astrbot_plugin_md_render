@@ -22,6 +22,7 @@ from render.parser import (
     RichCell,
     Segment,
     Table,
+    parse,
 )
 from render.table import render_table
 from render.clean.md_cleaner import clean_markdown, clean_code_block, clean_table, clean_expr
@@ -413,3 +414,54 @@ def assemble_messages(
     if non_plain:
         messages[0] = non_plain + messages[0]
     return messages
+
+
+async def process_chain(
+    chain: list[Any],
+    cfg: RenderConfig,
+    clean_cfg: CleanConfig | None,
+    data_dir: str,
+) -> list[list[Any]] | None:
+    """完整管道：解析、渲染、清洗、切分，产出待发送消息列表。
+
+    空链、纯空白文本、或无需任何处理（无元素、无需清洗、无需切分）
+    时返回 None，调用方原样保留消息链。
+
+    Args:
+        chain: 原始消息链组件列表。
+        cfg: 渲染配置。
+        clean_cfg: 清洗配置，为 None 时跳过清洗。
+        data_dir: 插件数据目录路径。
+
+    Returns:
+        待发送消息列表，末条留作 result.chain；无事可做时返回 None。
+    """
+    if not chain:
+        return None
+
+    text_parts = [c.text or "" for c in chain if _is_plain(c)]
+    full_text = "\n".join(text_parts)
+    if not full_text.strip():
+        return None
+
+    segments = parse(full_text, split_blank_lines=(cfg.blank_line_mode == "切分"))
+
+    has_elements = any(
+        type(s) in _ELEMENT_SPECS or isinstance(s, Divider) for s in segments
+    )
+    needs_cleaning = clean_cfg is not None and any(vars(clean_cfg).values())
+    needs_split = (
+        (cfg.blank_line_mode == "切分" or cfg.divider_mode == "切分")
+        and len(segments) > 1
+    )
+    if not has_elements and not needs_cleaning and not needs_split:
+        return None
+
+    groups = group_segments(segments, cfg)
+    non_plain = [c for c in chain if not _is_plain(c)]
+
+    built_groups = list(await asyncio.gather(
+        *(build_chain(g, cfg, clean_cfg, data_dir) for g in groups)
+    ))
+
+    return assemble_messages(built_groups, non_plain)
