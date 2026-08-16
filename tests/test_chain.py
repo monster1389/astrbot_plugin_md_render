@@ -419,6 +419,39 @@ class TestBuildChainWithCleaning:
         assert result[0].text == "E=mc^2"
 
 
+class TestElementCleanRecipe:
+    """元素清洗配方：ElementSpec 自带 clean 字段，_maybe_clean 以 spec 为键。"""
+
+    def test_maybe_clean_takes_spec_and_honors_flag(self):
+        """_maybe_clean(raw, cfg, spec)：开启清洗、关闭清洗、None 三种情况。"""
+        from render.chain import _ELEMENT_SPECS, _maybe_clean
+        from render.parser import CodeBlock
+        from render.utils import CleanConfig
+
+        spec = _ELEMENT_SPECS[CodeBlock]
+        raw = "```py\nx=1\n```"
+        assert _maybe_clean(raw, CleanConfig(code=True), spec) == "x=1"
+        assert _maybe_clean(raw, CleanConfig(code=False), spec) == raw
+        assert _maybe_clean(raw, None, spec) == raw
+
+    def test_each_element_spec_clean_self_contains_flag(self):
+        """每个元素配方的 clean 自己判断开关，开启清洗、关闭原样。"""
+        from render.chain import _ELEMENT_SPECS
+        from render.parser import BlockExpr, CodeBlock, InlineExpr, Table
+        from render.utils import CleanConfig
+
+        cases = [
+            (CodeBlock, "```py\nx=1\n```", {"code": True}, "x=1"),
+            (Table, "| A |\n|---|\n| 1 |", {"table": True}, "A\n1"),
+            (InlineExpr, "$x$", {"expr": True}, "x"),
+            (BlockExpr, "$$\nx\n$$", {"expr": True}, "x"),
+        ]
+        for type_, raw, flag, expected in cases:
+            spec = _ELEMENT_SPECS[type_]
+            assert spec.clean(raw, CleanConfig(**flag)) == expected
+            assert spec.clean(raw, CleanConfig(**{k: False for k in flag})) == raw
+
+
 class TestGroupSegments:
     def test_single_segment_single_group(self):
         """无切分点时，单个分组。"""

@@ -58,18 +58,18 @@ _MODE_SPECS: dict[str, ModeSpec] = {
 
 @dataclass(frozen=True)
 class ElementSpec:
-    """元素类型的渲染能力描述。
+    """元素类型的渲染与清洗配方。
 
     Attributes:
         render: 渲染函数，返回 PNG bytes。
         to_text: 将 segment 还原为原始 markdown 文本。
-        clean_key: 清洗配置字段与清洗函数键（code/table/expr）。
+        clean: 清洗函数，自带配置开关判断，关闭时原样返回。
         prefix: 产物文件名前缀。
         supports_file: 是否支持产出 .md 文件。
     """
-    render: Callable[[Any, RenderConfig, str], bytes]
+    render: Callable[[Any, str], bytes]
     to_text: Callable[[Any], str]
-    clean_key: str
+    clean: Callable[[str, CleanConfig], str]
     prefix: str
     supports_file: bool
 
@@ -78,28 +78,28 @@ _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
         render=lambda seg, dd: render_code(seg, dd),
         to_text=lambda s: f"```{s.lang}\n{s.code}\n```",
-        clean_key="code",
+        clean=lambda t, cc: clean_code_block(t) if cc.code else t,
         prefix="code",
         supports_file=True,
     ),
     Table: ElementSpec(
         render=lambda seg, dd: render_table(seg, dd),
         to_text=lambda s: _table_to_text(s),
-        clean_key="table",
+        clean=lambda t, cc: clean_table(t) if cc.table else t,
         prefix="table",
         supports_file=True,
     ),
     InlineExpr: ElementSpec(
         render=lambda seg, dd: render_expr(seg),
         to_text=lambda s: f"${s.expr}$",
-        clean_key="expr",
+        clean=lambda t, cc: clean_expr(t) if cc.expr else t,
         prefix="expr",
         supports_file=False,
     ),
     BlockExpr: ElementSpec(
         render=lambda seg, dd: render_expr(seg),
         to_text=lambda s: f"$$\n{s.expr}\n$$",
-        clean_key="expr",
+        clean=lambda t, cc: clean_expr(t) if cc.expr else t,
         prefix="expr",
         supports_file=False,
     ),
@@ -115,32 +115,20 @@ def _mode_for(seg: Any, cfg: RenderConfig) -> str:
     return cfg.expr_mode  # InlineExpr / BlockExpr
 
 
-_CLEAN_FLAGS: dict[str, Callable[[CleanConfig], bool]] = {
-    "code": lambda cc: cc.code,
-    "table": lambda cc: cc.table,
-    "expr": lambda cc: cc.expr,
-}
-_CLEAN_FNS: dict[str, Callable[[str], str]] = {
-    "code": lambda t: clean_code_block(t),
-    "table": lambda t: clean_table(t),
-    "expr": lambda t: clean_expr(t),
-}
-
-
-def _maybe_clean(raw_text: str, clean_cfg: CleanConfig | None, key: str) -> str:
-    """按元素类型清洗 markdown 标记，未启用或 clean_cfg 为 None 时原样返回。
+def _maybe_clean(raw_text: str, clean_cfg: CleanConfig | None, spec: ElementSpec) -> str:
+    """按元素配方清洗 markdown 标记，clean_cfg 为 None 时原样返回。
 
     Args:
         raw_text: 原始 markdown 文本。
         clean_cfg: 清洗配置，为 None 时不清洗。
-        key: 元素类型键（code/table/expr）。
+        spec: 元素配方，其 clean 自带配置开关判断。
 
     Returns:
         清洗后或原始文本。
     """
-    if clean_cfg is None or not _CLEAN_FLAGS[key](clean_cfg):
+    if clean_cfg is None:
         return raw_text
-    return _CLEAN_FNS[key](raw_text)
+    return spec.clean(raw_text, clean_cfg)
 
 
 def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
@@ -201,11 +189,11 @@ def _dispatch(
 
     # 渲染失败统一回退为原文
     if recipe.image and result is None:
-        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec.clean_key)))
+        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec)))
         return
 
     if recipe.text:
-        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec.clean_key)))
+        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec)))
     if recipe.image:
         _append_image(chain, result, spec.prefix, cfg, data_dir)
     if recipe.file and spec.supports_file:
