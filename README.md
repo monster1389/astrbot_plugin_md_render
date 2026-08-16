@@ -30,7 +30,7 @@
 
 ### 字体自动下载
 
-插件首次启动会自动下载 [更纱等宽黑体](https://github.com/be5invis/Sarasa-Gothic)（Sarasa Mono SC），中英文 2:1 严格等宽，约 8 MB。下载不阻塞启动，期间代码块可能无中文字体。
+插件首次启动会自动下载 [更纱等宽黑体](https://github.com/be5invis/Sarasa-Gothic)（Sarasa Mono SC），中英文 2:1 严格等宽。官方安装包为 7z 压缩包（约 68 MB，含 10 个字重），插件仅解压其中的 Regular 字重（约 25 MB）。下载走 gh-proxy 镜像，失败回退 GitHub 直连。下载不阻塞启动，期间代码块可能无中文字体。
 
 ### Markdown 格式清洗
 
