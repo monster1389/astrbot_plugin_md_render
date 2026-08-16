@@ -1,6 +1,6 @@
 """消息链组装与分段测试。"""
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
@@ -54,53 +54,49 @@ class TestBuildChain:
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
 
-    @patch("render.chain.render_code")
-    def test_code_render_image(self, mock_render):
+    def test_code_render_image(self):
         """代码块渲染图像模式：只有 Image 没有 File 也没有原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    @patch("render.chain.render_code")
-    def test_code_render_with_md(self, mock_render):
+    def test_code_render_with_md(self):
         """渲染且md文件：Image + File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
 
-    @patch("render.chain.render_code")
-    def test_code_keep_original(self, mock_render):
+    def test_code_keep_original(self):
         """渲染且保留原文：原文 Plain + Image，无 File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert "x=1" in result[0].text
         assert isinstance(result[1], Image)
 
-    @patch("render.chain.render_table")
-    def test_table_render_image(self, mock_render):
+    def test_table_render_image(self):
         """表格渲染图像模式。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
         assert isinstance(result[0], Image)
 
     def test_divider_split_mode_consumes_divider(self):
@@ -151,143 +147,136 @@ class TestBuildChain:
         assert result[0].text == "好，第一轮回顾 (。-`ω´-)"
         assert result[1].text == "测试 1：纯闲聊"
 
-    @patch("render.chain.render_expr")
-    def test_inline_expr_render_image(self, mock_render):
+    def test_inline_expr_render_image(self):
         """行内表达式渲染图像模式。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    @patch("render.chain.render_expr")
-    def test_block_expr_noop(self, mock_render):
-        """块级表达式不处理：还原为 markdown 原文。"""
+    def test_block_expr_noop(self):
+        """块级表达式不处理：还原为 markdown 原文，不调渲染。"""
         from render.chain import build_chain
 
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [BlockExpr(expr="\\int x dx")]
         cfg = _make_cfg(expr_mode="不处理")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={BlockExpr: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "$$" in result[0].text
-        mock_render.assert_not_called()
+        fake.assert_not_called()
 
-    @patch("render.chain.render_code")
-    def test_code_render_failure_fallback(self, mock_render):
+    def test_code_render_failure_fallback(self):
         """代码块渲染失败时回退为 Plain 原文，不影响后续段落。"""
         from render.chain import build_chain
         from render.utils import RenderConfig
 
-        mock_render.side_effect = RuntimeError("Pygments crashed")
+        fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
             code_mode="渲染图像", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
             blank_line_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
         assert isinstance(result[1], Plain)
         assert result[1].text == "后续文本"
 
-    @patch("render.chain.render_code")
-    def test_code_render_failure_keep_original_mode(self, mock_render):
+    def test_code_render_failure_keep_original_mode(self):
         """渲染且保留原文模式下渲染失败，只回退为原文（不重复）。"""
         from render.chain import build_chain
         from render.utils import RenderConfig
 
-        mock_render.side_effect = RuntimeError("Pygments crashed")
+        fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
             code_mode="渲染且保留原文", table_mode="不处理",
             expr_mode="不处理", divider_mode="不处理",
             blank_line_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1")]
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
 
-    @patch("render.chain.render_code")
-    def test_code_md_only(self, mock_render):
+    def test_code_md_only(self):
         """仅md文件模式：只有 File 没有 Image，不调渲染。"""
         from render.chain import build_chain
 
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="仅md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
-        mock_render.assert_not_called()
+        fake.assert_not_called()
 
-    @patch("render.chain.render_table")
-    def test_table_md_only(self, mock_render):
+    def test_table_md_only(self):
         """仅md文件模式：只有 File 没有 Image，不调渲染。"""
         from render.chain import build_chain
 
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="仅md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
-        mock_render.assert_not_called()
+        fake.assert_not_called()
 
-    @patch("render.chain.render_table")
-    def test_table_render_and_md(self, mock_render):
+    def test_table_render_and_md(self):
         """渲染且md文件模式：Image + File，无 Plain 原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染且md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
 
-    @patch("render.chain.render_code")
-    def test_code_zero_ttl_uses_frombytes(self, mock_render):
+    def test_code_zero_ttl_uses_frombytes(self):
         """temp_ttl=0 时代码块用 Image.fromBytes，不走文件落盘。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
         assert hasattr(img, "data") and img.data == b"fake_png_data"
         assert not hasattr(img, "file")
 
-    @patch("render.chain.render_table")
-    def test_table_zero_ttl_uses_frombytes(self, mock_render):
+    def test_table_zero_ttl_uses_frombytes(self):
         """temp_ttl=0 时表格用 Image.fromBytes，不走文件落盘。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
         assert hasattr(img, "data") and img.data == b"fake_png_data"
         assert not hasattr(img, "file")
 
-    @patch("render.chain.render_expr")
-    def test_expr_zero_ttl_uses_frombytes(self, mock_render):
+    def test_expr_zero_ttl_uses_frombytes(self):
         """temp_ttl=0 时表达式用 Image.fromBytes，不走文件落盘。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png_data"
+        fake = MagicMock(return_value=b"fake_png_data")
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
@@ -330,16 +319,15 @@ class TestBuildChainWithCleaning:
         result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
         assert result[0].text == "**粗体**"
 
-    @patch("render.chain.render_code")
-    def test_code_render_unaffected_by_cleaning(self, mock_render):
+    def test_code_render_unaffected_by_cleaning(self):
         """代码块渲染不受清洗影响，只有 Segment 被清洗。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png"
+        fake = MagicMock(return_value=b"fake_png")
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="**尾注**")]
         cfg = _make_cfg(code_mode="渲染图像")
         clean_cfg = _make_clean_cfg()
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Image)  # 代码块正常渲染
         assert isinstance(result[1], Plain)
@@ -367,16 +355,15 @@ class TestBuildChainWithCleaning:
         result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
         assert "```py" in result[0].text
 
-    @patch("render.chain.render_code")
-    def test_clean_code_with_keep_original(self, mock_render):
+    def test_clean_code_with_keep_original(self):
         """渲染且保留原文 + 清洗：原文去 fence，图片正常。"""
         from render.chain import build_chain
 
-        mock_render.return_value = b"fake_png"
+        fake = MagicMock(return_value=b"fake_png")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         clean_cfg = _make_clean_cfg(code=True)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert result[0].text == "x=1"
@@ -632,3 +619,48 @@ class TestAssembleMessages:
         assert len(result) == 2
         assert [c.text for c in result[0]] == ["1"]
         assert [c.text for c in result[1]] == ["2", "3"]
+
+
+class TestRenderInjection:
+    """渲染器注入：build_chain/process_chain 接受 renderers 覆盖层，未覆盖走默认配方。"""
+
+    def test_renderers_override_spec_render(self):
+        """传 renderers 时被覆盖类型走 fake，产物进消息链。"""
+        from unittest.mock import MagicMock
+
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        segments = [CodeBlock(lang="py", code="x=1")]
+        cfg = _make_cfg(code_mode="渲染图像")
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        fake.assert_called_once()
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
+
+    def test_process_chain_passes_renderers(self):
+        """process_chain 透传 renderers 到 build_chain。"""
+        from unittest.mock import MagicMock
+
+        from render.chain import process_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        cfg = _make_cfg(code_mode="渲染图像")
+        result = asyncio.run(process_chain(
+            [Plain("```py\nx=1\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake}
+        ))
+        fake.assert_called_once()
+        assert isinstance(result[0][0], Image)
+
+    def test_renderer_for_fallback_and_override(self):
+        """_renderer_for：覆盖类型取 fake，未覆盖回退 spec.render，None 走默认。"""
+        from unittest.mock import MagicMock
+
+        from render.chain import _ELEMENT_SPECS, _renderer_for
+
+        fake = MagicMock(return_value=b"fake_png")
+        code_spec = _ELEMENT_SPECS[CodeBlock]
+        table_spec = _ELEMENT_SPECS[Table]
+        assert _renderer_for(CodeBlock, code_spec, {CodeBlock: fake}) is fake
+        assert _renderer_for(Table, table_spec, {CodeBlock: fake}) is table_spec.render
+        assert _renderer_for(CodeBlock, code_spec, None) is code_spec.render

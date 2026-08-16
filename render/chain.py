@@ -74,30 +74,50 @@ class ElementSpec:
 
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
-        render=lambda seg, dd: render_code(seg, dd),
+        render=render_code,
         text=lambda seg, cc: seg.code if (cc and cc.code) else f"```{seg.lang}\n{seg.code}\n```",
         prefix="code",
         supports_file=True,
     ),
     Table: ElementSpec(
-        render=lambda seg, dd: render_table(seg, dd),
+        render=render_table,
         text=lambda seg, cc: _table_to_plain(seg) if (cc and cc.table) else _table_to_text(seg),
         prefix="table",
         supports_file=True,
     ),
     InlineExpr: ElementSpec(
-        render=lambda seg, dd: render_expr(seg),
+        render=render_expr,
         text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"${seg.expr}$",
         prefix="expr",
         supports_file=False,
     ),
     BlockExpr: ElementSpec(
-        render=lambda seg, dd: render_expr(seg),
+        render=render_expr,
         text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"$$\n{seg.expr}\n$$",
         prefix="expr",
         supports_file=False,
     ),
 }
+
+
+def _renderer_for(
+    seg_type: type,
+    spec: ElementSpec,
+    renderers: dict[type, Callable] | None,
+) -> Callable[[Any, str], bytes]:
+    """按覆盖层解析 segment 类型的渲染器，未覆盖回退 spec.render。
+
+    Args:
+        seg_type: segment 类型。
+        spec: 元素配方。
+        renderers: 渲染器覆盖层，为 None 或未含该类型时回退 spec.render。
+
+    Returns:
+        渲染函数。
+    """
+    if renderers and seg_type in renderers:
+        return renderers[seg_type]
+    return spec.render
 
 
 def _mode_for(seg: Any, cfg: RenderConfig) -> str:
@@ -182,6 +202,7 @@ async def build_chain(
     cfg: RenderConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
+    renderers: dict[type, Callable] | None = None,
 ) -> list[Plain | Image | AstrFile]:
     """将解析后的 Segment 列表转换为 AstrBot Component 列表。
 
@@ -192,6 +213,7 @@ async def build_chain(
         cfg: 渲染配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
+        renderers: 渲染器覆盖层，为 None 或未覆盖时用元素配方默认渲染器。
 
     Returns:
         AstrBot Component 对象列表。
@@ -204,7 +226,8 @@ async def build_chain(
             continue
         if _MODE_SPECS[_mode_for(seg, cfg)].image:
             indices.append(i)
-            coros.append(asyncio.to_thread(_ELEMENT_SPECS[type(seg)].render, seg, data_dir))
+            spec = _ELEMENT_SPECS[type(seg)]
+            coros.append(asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg, data_dir))
 
     # 并发执行
     if coros:
@@ -411,6 +434,7 @@ async def process_chain(
     cfg: RenderConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
+    renderers: dict[type, Callable] | None = None,
 ) -> list[list[Any]] | None:
     """完整管道：解析、渲染、清洗、切分，产出待发送消息列表。
 
@@ -422,6 +446,7 @@ async def process_chain(
         cfg: 渲染配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
+        renderers: 渲染器覆盖层，透传给 build_chain。
 
     Returns:
         待发送消息列表，末条留作 result.chain；无事可做时返回 None。
@@ -451,7 +476,7 @@ async def process_chain(
     non_plain = [c for c in chain if not _is_plain(c)]
 
     built_groups = list(await asyncio.gather(
-        *(build_chain(g, cfg, clean_cfg, data_dir) for g in groups)
+        *(build_chain(g, cfg, clean_cfg, data_dir, renderers) for g in groups)
     ))
 
     return assemble_messages(built_groups, non_plain)

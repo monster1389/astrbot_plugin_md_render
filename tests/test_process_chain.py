@@ -1,9 +1,10 @@
 """管道编排测试：消息链 → 待发送消息列表。"""
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 from astrbot.api.message_components import Plain, Image
 
+from render.parser import CodeBlock
 from render.utils import CleanConfig, RenderConfig
 
 
@@ -65,14 +66,14 @@ class TestProcessChain:
         assert result is not None
         assert [c.text for c in result[0]] == ["加粗"]
 
-    @patch("render.chain.render_code", return_value=b"fake_png")
-    def test_keep_original_splits_text_and_image(self, mock_render):
+    def test_keep_original_splits_text_and_image(self):
         """渲染且保留原文：原文文本前置，图片留末条。"""
         from render.chain import process_chain
 
+        fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(
-            process_chain([Plain("```py\nx=1\n```")], cfg, None, "/tmp")
+            process_chain([Plain("```py\nx=1\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake})
         )
         assert result is not None
         assert len(result) == 2
@@ -107,14 +108,14 @@ class TestProcessChain:
         assert [c.text for c in result[1]] == ["第二段"]
         assert [c.text for c in result[2]] == ["第三段"]
 
-    @patch("render.chain.render_code", side_effect=lambda seg, data_dir: b"png_" + seg.code.encode())
-    def test_interleaved_components_in_order(self, mock_render):
+    def test_interleaved_components_in_order(self):
         """交错元素按组件拆条，保持阅读顺序。"""
         from render.chain import process_chain
 
+        fake = MagicMock(side_effect=lambda seg, data_dir: b"png_" + seg.code.encode())
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(
-            process_chain([Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")], cfg, None, "/tmp")
+            process_chain([Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake})
         )
         assert result is not None
         assert len(result) == 5
