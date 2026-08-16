@@ -31,7 +31,9 @@ from render.chain import build_chain, group_segments, merge_chain, _is_plain  # 
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
+# 国内直连 GitHub 不稳定，gh-proxy 镜像前置兜底
 _FONT_URLS = [
+    "https://gh-proxy.com/https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
     "https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
 ]
 
