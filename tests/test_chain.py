@@ -59,7 +59,7 @@ class TestBuildChain:
         """代码块渲染图像模式：只有 Image 没有 File 也没有原文。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png_data"
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
@@ -71,7 +71,7 @@ class TestBuildChain:
         """渲染且md文件：Image + File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png_data"
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且md文件")
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
@@ -83,7 +83,7 @@ class TestBuildChain:
         """渲染且保留原文：原文 Plain + Image，无 File。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png_data"
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
@@ -254,7 +254,7 @@ class TestBuildChain:
         """temp_ttl=0 时代码块用 Image.fromBytes，不走文件落盘。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png_data", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png_data"
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像", temp_ttl=0)
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
@@ -335,7 +335,7 @@ class TestBuildChainWithCleaning:
         """代码块渲染不受清洗影响，只有 Segment 被清洗。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png"
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="**尾注**")]
         cfg = _make_cfg(code_mode="渲染图像")
         clean_cfg = _make_clean_cfg()
@@ -372,7 +372,7 @@ class TestBuildChainWithCleaning:
         """渲染且保留原文 + 清洗：原文去 fence，图片正常。"""
         from render.chain import build_chain
 
-        mock_render.return_value = (b"fake_png", "```py\nx=1\n```")
+        mock_render.return_value = b"fake_png"
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         clean_cfg = _make_clean_cfg(code=True)

@@ -7,7 +7,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
@@ -29,6 +30,90 @@ from render.utils import RenderConfig, CleanConfig, build_temp_path
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ModeSpec:
+    """模式 → 产物配方：text/image/file 三个插槽是否填充。
+
+    Attributes:
+        text: 是否产出原文 Plain。
+        image: 是否产出渲染 PNG。
+        file: 是否产出 .md 文件。
+    """
+    text: bool
+    image: bool
+    file: bool
+
+
+# 联合能力表：模式字符串 → 产物配方。配置边界（_conf_schema.json）保持中文字符串，
+# 此表即这些字符串唯一的解释处。各元素类型的可达模式是其子集（表达式无 md 文件模式）。
+_MODE_SPECS: dict[str, ModeSpec] = {
+    "不处理":           ModeSpec(text=True,  image=False, file=False),
+    "渲染图像":         ModeSpec(text=False, image=True,  file=False),
+    "渲染且保留原文":     ModeSpec(text=True,  image=True,  file=False),
+    "渲染且md文件":      ModeSpec(text=False, image=True,  file=True),
+    "仅md文件":         ModeSpec(text=False, image=False, file=True),
+}
+
+
+@dataclass(frozen=True)
+class ElementSpec:
+    """元素类型的渲染能力描述。
+
+    Attributes:
+        render: 渲染函数，返回 PNG bytes。
+        to_text: 将 segment 还原为原始 markdown 文本。
+        clean_key: 清洗配置字段与清洗函数键（code/table/expr）。
+        prefix: 产物文件名前缀。
+        supports_file: 是否支持产出 .md 文件。
+    """
+    render: Callable[[Any, RenderConfig, str], bytes]
+    to_text: Callable[[Any], str]
+    clean_key: str
+    prefix: str
+    supports_file: bool
+
+
+_ELEMENT_SPECS: dict[type, ElementSpec] = {
+    CodeBlock: ElementSpec(
+        render=lambda seg, cfg, dd: render_code(seg, cfg, dd),
+        to_text=lambda s: f"```{s.lang}\n{s.code}\n```",
+        clean_key="code",
+        prefix="code",
+        supports_file=True,
+    ),
+    Table: ElementSpec(
+        render=lambda seg, cfg, dd: render_table(seg, cfg, dd),
+        to_text=lambda s: _table_to_text(s),
+        clean_key="table",
+        prefix="table",
+        supports_file=True,
+    ),
+    InlineExpr: ElementSpec(
+        render=lambda seg, cfg, dd: render_inline_expr(seg, cfg, dd),
+        to_text=lambda s: f"${s.expr}$",
+        clean_key="expr",
+        prefix="expr",
+        supports_file=False,
+    ),
+    BlockExpr: ElementSpec(
+        render=lambda seg, cfg, dd: render_block_expr(seg, cfg, dd),
+        to_text=lambda s: f"$$\n{s.expr}\n$$",
+        clean_key="expr",
+        prefix="expr",
+        supports_file=False,
+    ),
+}
+
+
+def _mode_for(seg: Any, cfg: RenderConfig) -> str:
+    """读取 segment 对应的渲染模式。"""
+    if isinstance(seg, CodeBlock):
+        return cfg.code_mode
+    if isinstance(seg, Table):
+        return cfg.table_mode
+    return cfg.expr_mode  # InlineExpr / BlockExpr
+
+
 def _make_render_fn(seg: Any, cfg: RenderConfig, data_dir: str):
     """构造无参渲染函数，供 asyncio.to_thread 调用。
 
@@ -38,152 +123,53 @@ def _make_render_fn(seg: Any, cfg: RenderConfig, data_dir: str):
         data_dir: 插件数据目录路径。
 
     Returns:
-        无参可调用对象，返回 bytes 或 (bytes, str)。
+        无参可调用对象，返回 PNG bytes。
     """
-    if isinstance(seg, CodeBlock):
-        def _fn():
-            return render_code(seg, cfg, data_dir)
-        return _fn
-    elif isinstance(seg, Table):
-        def _fn():
-            return render_table(seg, cfg, data_dir)
-        return _fn
-    elif isinstance(seg, InlineExpr):
-        def _fn():
-            return render_inline_expr(seg, cfg, data_dir)
-        return _fn
-    elif isinstance(seg, BlockExpr):
-        def _fn():
-            return render_block_expr(seg, cfg, data_dir)
-        return _fn
-    raise ValueError(f"Unknown segment type: {type(seg)}")
+    render = _ELEMENT_SPECS[type(seg)].render
+
+    def _fn():
+        return render(seg, cfg, data_dir)
+    return _fn
 
 
-def _maybe_clean_code(raw_text: str, clean_cfg: CleanConfig | None) -> str:
-    """如果清洗配置启用代码块清洗，去除围栏标记。
-
-    Args:
-        raw_text: 原始 markdown 代码块文本（含 ``` 围栏）。
-        clean_cfg: 清洗配置，为 None 时不清洗。
-
-    Returns:
-        清洗后或原始文本。
-    """
-    if clean_cfg is not None and clean_cfg.code:
-        return clean_code_block(raw_text)
-    return raw_text
+_CLEAN_FLAGS: dict[str, Callable[[CleanConfig], bool]] = {
+    "code": lambda cc: cc.code,
+    "table": lambda cc: cc.table,
+    "expr": lambda cc: cc.expr,
+}
+_CLEAN_FNS: dict[str, Callable[[str], str]] = {
+    "code": lambda t: clean_code_block(t),
+    "table": lambda t: clean_table(t),
+    "expr": lambda t: clean_expr(t),
+}
 
 
-def _maybe_clean_generic(raw_text: str, clean_cfg: CleanConfig | None, seg_type: str) -> str:
-    """如果清洗配置启用对应类型清洗，去除格式标记。
+def _maybe_clean(raw_text: str, clean_cfg: CleanConfig | None, key: str) -> str:
+    """按元素类型清洗 markdown 标记，未启用或 clean_cfg 为 None 时原样返回。
 
     Args:
         raw_text: 原始 markdown 文本。
         clean_cfg: 清洗配置，为 None 时不清洗。
-        seg_type: segment 类型（"table" 或 "expr"）。
+        key: 元素类型键（code/table/expr）。
 
     Returns:
         清洗后或原始文本。
     """
-    if clean_cfg is None:
+    if clean_cfg is None or not _CLEAN_FLAGS[key](clean_cfg):
         return raw_text
-    if seg_type == "table" and clean_cfg.table:
-        return clean_table(raw_text)
-    if seg_type == "expr" and clean_cfg.expr:
-        return clean_expr(raw_text)
-    return raw_text
+    return _CLEAN_FNS[key](raw_text)
 
 
-def _dispatch_code(
-    chain: list,
-    raw_text: str,
-    mode: str,
-    cfg: RenderConfig,
-    clean_cfg: CleanConfig | None,
-    data_dir: str,
-    result: object,
-) -> None:
-    """代码块分发（支持 md 文件模式）。
+def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
+    """按 temp_ttl 将 PNG 以 fromBytes 或落盘文件形式加入消息链。
 
     Args:
         chain: 目标消息链列表。
-        raw_text: 原始 markdown 文本。
-        mode: 配置渲染模式。
-        cfg: 渲染配置。
-        clean_cfg: 清洗配置，为 None 时不清洗。
-        data_dir: 插件数据目录路径。
-        result: 渲染结果 — (bytes, str) 或 None（失败）。
-    """
-    if mode == "不处理":
-        chain.append(Plain(_maybe_clean_code(raw_text, clean_cfg)))
-        return
-    if mode == "仅md文件":
-        md_path = build_temp_path(data_dir, "code", ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(raw_text)
-        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
-        return
-    if result is None:
-        chain.append(Plain(_maybe_clean_code(raw_text, clean_cfg)))
-        return
-    png_bytes, md_text = result if isinstance(result, tuple) else (result, None)
-    if "保留原文" in mode:
-        chain.append(Plain(_maybe_clean_code(raw_text, clean_cfg)))
-    if cfg.temp_ttl == 0:
-        chain.append(Image.fromBytes(png_bytes))
-    else:
-        png_path = build_temp_path(data_dir, "code", ".png")
-        with open(png_path, "wb") as f:
-            f.write(png_bytes)
-        chain.append(Image.fromFileSystem(png_path))
-    if mode == "渲染且md文件":
-        md_path = build_temp_path(data_dir, "code", ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_text if md_text else raw_text)
-        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
-
-
-def _dispatch_generic(
-    chain: list,
-    raw_text: str,
-    mode: str,
-    cfg: RenderConfig,
-    clean_cfg: CleanConfig | None,
-    data_dir: str,
-    prefix: str,
-    result: object,
-    has_file_mode: bool,
-    seg_type: str = "",
-) -> None:
-    """表格/表达式分发。
-
-    Args:
-        chain: 目标消息链列表。
-        raw_text: 原始 markdown 文本。
-        mode: 配置渲染模式。
-        cfg: 渲染配置。
-        clean_cfg: 清洗配置，为 None 时不清洗。
-        data_dir: 插件数据目录路径。
+        png_bytes: 渲染出的 PNG 字节。
         prefix: 产物文件名前缀。
-        result: 渲染结果 — bytes 或 None（失败）。
-        has_file_mode: 是否支持 md 文件模式。
-        seg_type: segment 类型（"table" 或 "expr"）。
+        cfg: 渲染配置。
+        data_dir: 插件数据目录路径。
     """
-    if mode == "不处理":
-        chain.append(Plain(_maybe_clean_generic(raw_text, clean_cfg, seg_type)))
-        return
-    if has_file_mode and mode == "仅md文件":
-        md_path = build_temp_path(data_dir, prefix, ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(raw_text)
-        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
-        return
-    if result is None:
-        chain.append(Plain(_maybe_clean_generic(raw_text, clean_cfg, seg_type)))
-        return
-    png_bytes = result
-    if "保留原文" in mode:
-        chain.append(Plain(_maybe_clean_generic(raw_text, clean_cfg, seg_type)))
     if cfg.temp_ttl == 0:
         chain.append(Image.fromBytes(png_bytes))
     else:
@@ -191,14 +177,24 @@ def _dispatch_generic(
         with open(png_path, "wb") as f:
             f.write(png_bytes)
         chain.append(Image.fromFileSystem(png_path))
-    if has_file_mode and mode == "渲染且md文件":
-        md_path = build_temp_path(data_dir, prefix, ".md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(raw_text)
-        chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
 
 
-def _dispatch_result(
+def _append_file(chain: list, text: str, prefix: str, data_dir: str) -> None:
+    """将 markdown 文本写入 .md 文件并加入消息链。
+
+    Args:
+        chain: 目标消息链列表。
+        text: markdown 原始文本。
+        prefix: 产物文件名前缀。
+        data_dir: 插件数据目录路径。
+    """
+    md_path = build_temp_path(data_dir, prefix, ".md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
+
+
+def _dispatch(
     chain: list,
     seg: Any,
     result: object,
@@ -206,28 +202,31 @@ def _dispatch_result(
     clean_cfg: CleanConfig | None,
     data_dir: str,
 ) -> None:
-    """接收已完成（或失败）的渲染结果，按 mode 组装组件。
+    """按 (元素类型, 模式) 配方组装组件到消息链。
 
     Args:
         chain: 目标消息链列表。
-        seg: 原始 segment。
-        result: 渲染结果 — bytes / (bytes, str) / None（失败）。
+        seg: 元素 segment。
+        result: 渲染结果 — bytes 或 None（失败）。
         cfg: 渲染配置。
         clean_cfg: 清洗配置，为 None 时不清洗。
         data_dir: 插件数据目录路径。
     """
-    if isinstance(seg, CodeBlock):
-        raw_text = f"```{seg.lang}\n{seg.code}\n```"
-        _dispatch_code(chain, raw_text, cfg.code_mode, cfg, clean_cfg, data_dir, result)
-    elif isinstance(seg, Table):
-        raw_text = _table_to_text(seg)
-        _dispatch_generic(chain, raw_text, cfg.table_mode, cfg, clean_cfg, data_dir, "table", result, has_file_mode=True, seg_type="table")
-    elif isinstance(seg, InlineExpr):
-        raw_text = f"${seg.expr}$"
-        _dispatch_generic(chain, raw_text, cfg.expr_mode, cfg, clean_cfg, data_dir, "expr", result, has_file_mode=False, seg_type="expr")
-    elif isinstance(seg, BlockExpr):
-        raw_text = f"$$\n{seg.expr}\n$$"
-        _dispatch_generic(chain, raw_text, cfg.expr_mode, cfg, clean_cfg, data_dir, "expr", result, has_file_mode=False, seg_type="expr")
+    spec = _ELEMENT_SPECS[type(seg)]
+    recipe = _MODE_SPECS[_mode_for(seg, cfg)]
+    raw_text = spec.to_text(seg)
+
+    # 渲染失败统一回退为原文
+    if recipe.image and result is None:
+        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec.clean_key)))
+        return
+
+    if recipe.text:
+        chain.append(Plain(_maybe_clean(raw_text, clean_cfg, spec.clean_key)))
+    if recipe.image:
+        _append_image(chain, result, spec.prefix, cfg, data_dir)
+    if recipe.file and spec.supports_file:
+        _append_file(chain, raw_text, spec.prefix, data_dir)
 
 
 async def build_chain(
@@ -249,18 +248,13 @@ async def build_chain(
     Returns:
         AstrBot Component 对象列表。
     """
-    # 第一遍：收集需要渲染的 segment 索引和协程
+    # 第一遍：收集需要渲染的 segment 索引和协程（仅配方含图片插槽的模式）
     indices: list[int] = []
     coros: list[asyncio.Future] = []
     for i, seg in enumerate(segments):
-        mode = None
-        if isinstance(seg, CodeBlock):
-            mode = cfg.code_mode
-        elif isinstance(seg, Table):
-            mode = cfg.table_mode
-        elif isinstance(seg, (InlineExpr, BlockExpr)):
-            mode = cfg.expr_mode
-        if mode is not None and mode not in ("不处理", "仅md文件"):
+        if type(seg) not in _ELEMENT_SPECS:
+            continue
+        if _MODE_SPECS[_mode_for(seg, cfg)].image:
             fn = _make_render_fn(seg, cfg, data_dir)
             indices.append(i)
             coros.append(asyncio.to_thread(fn))
@@ -284,9 +278,9 @@ async def build_chain(
     chain: list[Plain | Image | AstrFile] = []
     for i, seg in enumerate(segments):
         if i in results:
-            _dispatch_result(chain, seg, results[i], cfg, clean_cfg, data_dir)
-        elif isinstance(seg, (CodeBlock, Table, InlineExpr, BlockExpr)):
-            _dispatch_result(chain, seg, None, cfg, clean_cfg, data_dir)
+            _dispatch(chain, seg, results[i], cfg, clean_cfg, data_dir)
+        elif type(seg) in _ELEMENT_SPECS:
+            _dispatch(chain, seg, None, cfg, clean_cfg, data_dir)
         elif isinstance(seg, Divider):
             if cfg.divider_mode == "不处理":
                 chain.append(Plain("\n\n---\n\n"))

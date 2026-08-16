@@ -235,7 +235,7 @@ class TestKeepOriginalSplit:
         context.send_message = AsyncMock()
 
         with patch('main.StarTools') as mock_tools, \
-                patch('render.chain.render_code', return_value=(b"fake_png", "```py\nx=1\n```")):
+                patch('render.chain.render_code', return_value=b"fake_png"):
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
             plugin = MdRenderPlugin(context=context, config=config)
             plugin.cfg, plugin.clean_cfg = load_config(config)
@@ -271,7 +271,7 @@ class TestInterleavedSplit:
         context.send_message = AsyncMock()
 
         def _fake_render(seg, cfg, data_dir):
-            return (b"png_" + seg.code.encode(), f"```{seg.lang}\n{seg.code}\n```")
+            return b"png_" + seg.code.encode()
 
         with patch('main.StarTools') as mock_tools, \
                 patch('render.chain.render_code', side_effect=_fake_render):
@@ -316,7 +316,7 @@ class TestInterleavedSplit:
             return 1.0
 
         def _fake_render(seg, cfg, data_dir):
-            return (b"png", f"```{seg.lang}\n{seg.code}\n```")
+            return b"png"
 
         with patch('main.StarTools') as mock_tools, \
                 patch('render.chain.render_code', side_effect=_fake_render), \

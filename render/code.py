@@ -22,8 +22,8 @@ def render_code(
     codeblock: object,
     cfg: RenderConfig,
     data_dir: str,
-) -> tuple[bytes, str]:
-    """渲染代码块为 PNG 图片和 MD 围栏代码文本。
+) -> bytes:
+    """渲染代码块为 PNG 图片。
 
     Args:
         codeblock: CodeBlock 实例，含 lang 和 code 属性。
@@ -31,7 +31,7 @@ def render_code(
         data_dir: 插件数据目录路径。
 
     Returns:
-        (png_bytes, md_text) PNG 图片字节和 MD 围栏代码文本。
+        PNG 图片字节。
     """
     lang: str = getattr(codeblock, "lang", "") or ""
     code: str = getattr(codeblock, "code", "")
@@ -57,8 +57,7 @@ def render_code(
     img = img.convert("P", palette=Image.Palette.ADAPTIVE, colors=128)
     buf = io.BytesIO()
     img.save(buf, "PNG", optimize=True)
-    png_data = buf.getvalue()
 
-    return png_data, f"```{lang}\n{code}\n```"
+    return buf.getvalue()
 
 
