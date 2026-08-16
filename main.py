@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import random
 import shutil
 import sys
 import tempfile
@@ -26,15 +25,15 @@ _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
-from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
 from render.chain import (  # noqa: E402
     _is_plain,
+    assemble_messages,
     build_chain,
     group_segments,
-    has_media,
-    split_messages,
 )
 from render.cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
+from render.deliver import deliver  # noqa: E402
+from render.parser import parse, CodeBlock, Table, InlineExpr, BlockExpr, Divider  # noqa: E402
 from render.utils import load_config  # noqa: E402
 
 # 国内直连 GitHub 不稳定，gh-proxy 镜像前置兜底
@@ -153,37 +152,16 @@ class MdRenderPlugin(Star):
             *(build_chain(g, self.cfg, self.clean_cfg, data_dir) for g in groups)
         ))
 
-        messages: list[list] = []
-        for built in built_groups:
-            messages.extend(split_messages(built))
-
-        if non_plain:
-            messages[0] = non_plain + messages[0]
+        messages = assemble_messages(built_groups, non_plain)
 
         self._log_render_summary(messages)
 
-        for message_chain in messages[:-1]:
-            if self._has_content(message_chain):
-                await self._send_chain(event, message_chain)
-                if self.cfg.send_delay:
-                    # 图片/文件间隔 1~3s 防风控；纯文本间隔短一些
-                    if has_media(message_chain):
-                        await asyncio.sleep(random.uniform(1.0, 3.0))
-                    else:
-                        await asyncio.sleep(random.uniform(0.3, 1.0))
+        async def _send(comps: list) -> None:
+            mc = MessageChain()
+            mc.chain = comps
+            await self.context.send_message(event.unified_msg_origin, mc)
 
-        result.chain = messages[-1]
-
-    async def _send_chain(self, event: AstrMessageEvent, comps: list) -> None:
-        """将组件列表作为一条独立消息发送。
-
-        Args:
-            event: AstrBot 消息事件。
-            comps: 组件列表。
-        """
-        mc = MessageChain()
-        mc.chain = comps
-        await self.context.send_message(event.unified_msg_origin, mc)
+        result.chain = await deliver(_send, messages, self.cfg)
 
     def _log_render_summary(self, chains: list[list]) -> None:
         """汇总渲染产物数量日志，0 则静默。
@@ -203,16 +181,6 @@ class MdRenderPlugin(Star):
             if self.cfg.expr_mode != "不处理":
                 parts.append(f"表达式({self.cfg.expr_mode})")
             logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
-
-    @staticmethod
-    def _has_content(comps: list) -> bool:
-        """判断组件列表是否含实质内容（有非 Plain，或 Plain 文本非空白）。"""
-        for c in comps:
-            if not _is_plain(c):
-                return True
-            if (c.text or "").strip():
-                return True
-        return False
 
     async def terminate(self):
         """插件销毁。"""

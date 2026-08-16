@@ -308,25 +308,6 @@ def _is_plain(comp: Any) -> bool:
     )
 
 
-def merge_chain(original: list[Any], built: list[Any]) -> list[Any]:
-    """合并原始链的非 Plain 组件到构建链之前。
-
-    原链中的 Image、File、Reply 等非 Plain 组件不会被 build_chain
-    生成的新链覆盖，全部保留并按原顺序前置。
-
-    Args:
-        original: 原始的 AstrBot 消息链。
-        built: build_chain 构建的新消息链。
-
-    Returns:
-        合并后的消息链。
-    """
-    non_plain = [c for c in original if not _is_plain(c)]
-    if not non_plain:
-        return built
-    return non_plain + built
-
-
 def _table_to_text(table: Table) -> str:
     """将 Table 还原为原始 markdown 文本。
 
@@ -430,3 +411,24 @@ def split_messages(chain: list[Any]) -> list[list[Any]]:
     if not has_media(chain):
         return [chain]
     return [[c] for c in chain]
+
+
+def assemble_messages(
+    built_groups: list[list[Any]],
+    non_plain: list[Any],
+) -> list[list[Any]]:
+    """将各组的构建链拆条后拼接为待发送消息列表。
+
+    含媒体的组逐组件拆成独立消息；原链的非 Plain 组件前置到首条消息。
+
+    Args:
+        built_groups: build_chain 对各组的结果列表。
+        non_plain: 原始链中的非 Plain 组件，为空则不做前置。
+
+    Returns:
+        待发送消息列表，末条留作 result.chain。
+    """
+    messages = [m for built in built_groups for m in split_messages(built)]
+    if non_plain:
+        messages[0] = non_plain + messages[0]
+    return messages

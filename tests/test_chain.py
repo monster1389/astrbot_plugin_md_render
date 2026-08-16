@@ -419,66 +419,6 @@ class TestBuildChainWithCleaning:
         assert result[0].text == "E=mc^2"
 
 
-class TestMergeChain:
-    def test_image_preserved(self):
-        """原链中的 Image 组件在合并后保留。"""
-        from render.chain import merge_chain
-
-        original = [Image.fromFileSystem("/tmp/ava.png"), Plain("角色数据")]
-        built = [Plain("角色数据")]
-        result = merge_chain(original, built)
-        assert len(result) == 2
-        assert isinstance(result[0], Image)
-        assert isinstance(result[1], Plain)
-        assert result[1].text == "角色数据"
-
-    def test_file_preserved(self):
-        """原链中的 File 组件在合并后保留。"""
-        from render.chain import merge_chain
-
-        original = [AstrFile(name="doc.md", file="/tmp/doc.md"), Plain("文本")]
-        built = [Plain("文本")]
-        result = merge_chain(original, built)
-        assert len(result) == 2
-        assert isinstance(result[0], AstrFile)
-        assert isinstance(result[1], Plain)
-
-    def test_multiple_non_plain_preserved(self):
-        """多个非 Plain 组件均保留，按原顺序前置。"""
-        from render.chain import merge_chain
-
-        original = [
-            Image.fromFileSystem("/tmp/a.png"),
-            AstrFile(name="b.md", file="/tmp/b.md"),
-            Plain("文本"),
-        ]
-        built = [Plain("文本")]
-        result = merge_chain(original, built)
-        assert len(result) == 3
-        assert isinstance(result[0], Image)
-        assert isinstance(result[1], AstrFile)
-        assert isinstance(result[2], Plain)
-
-    def test_plain_only_chain_unchanged(self):
-        """纯 Plain 原链：built 直接返回，不添加额外组件。"""
-        from render.chain import merge_chain
-
-        original = [Plain("Hello")]
-        built = [Plain("Hello")]
-        result = merge_chain(original, built)
-        assert len(result) == 1
-        assert isinstance(result[0], Plain)
-        assert result[0].text == "Hello"
-
-    def test_empty_original_preserves_built(self):
-        """空原链直接返回 built。"""
-        from render.chain import merge_chain
-
-        built = [Plain("text")]
-        result = merge_chain([], built)
-        assert result == built
-
-
 class TestGroupSegments:
     def test_single_segment_single_group(self):
         """无切分点时，单个分组。"""
@@ -588,3 +528,46 @@ class TestSplitMessages:
         a = Plain("A")
         result = split_messages([a])
         assert result == [[a]]
+
+
+class TestAssembleMessages:
+    def test_plain_groups_kept_whole(self):
+        """纯文本组保持单条不拆。"""
+        from render.chain import assemble_messages
+
+        groups = [[Plain("A"), Plain("B")]]
+        result = assemble_messages(groups, [])
+        assert len(result) == 1
+        assert [c.text for c in result[0]] == ["A", "B"]
+
+    def test_media_groups_split_per_component(self):
+        """含媒体组按组件拆成独立消息。"""
+        from render.chain import assemble_messages
+
+        groups = [[Plain("A"), Image.fromBytes(b"x"), Plain("B")]]
+        result = assemble_messages(groups, [])
+        assert len(result) == 3
+        assert isinstance(result[0][0], Plain) and result[0][0].text == "A"
+        assert isinstance(result[1][0], Image)
+        assert isinstance(result[2][0], Plain) and result[2][0].text == "B"
+
+    def test_non_plain_prepended_to_first(self):
+        """非 Plain 组件前置到首条消息。"""
+        from render.chain import assemble_messages
+
+        non_plain = [Image.fromFileSystem("/tmp/a.png")]
+        groups = [[Plain("文本")]]
+        result = assemble_messages(groups, non_plain)
+        assert len(result) == 1
+        assert isinstance(result[0][0], Image)
+        assert result[0][1].text == "文本"
+
+    def test_multiple_groups_concatenated(self):
+        """多组消息按序拼接。"""
+        from render.chain import assemble_messages
+
+        groups = [[Plain("1")], [Plain("2"), Plain("3")]]
+        result = assemble_messages(groups, [])
+        assert len(result) == 2
+        assert [c.text for c in result[0]] == ["1"]
+        assert [c.text for c in result[1]] == ["2", "3"]
