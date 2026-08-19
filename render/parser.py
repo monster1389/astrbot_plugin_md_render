@@ -87,6 +87,65 @@ class Divider:
     pass
 
 
+def cell_to_markdown(cell: RichCell) -> str:
+    """将单元格按装饰顺序还原为 markdown 文本。
+
+    Args:
+        cell: 富文本单元格。
+
+    Returns:
+        还原的 markdown 文本。
+    """
+    parts: list[str] = []
+    for span in cell.spans:
+        s = span.text
+        if span.code:
+            s = f"`{s}`"
+        if span.strike:
+            s = f"~~{s}~~"
+        if span.italic:
+            s = f"*{s}*"
+        if span.bold:
+            s = f"**{s}**"
+        if span.link_url:
+            s = f"[{s}]({span.link_url})"
+        parts.append(s)
+    return "".join(parts)
+
+
+def table_to_markdown(table: Table) -> str:
+    """将 Table 还原为 markdown 表格原文。
+
+    Args:
+        table: Table 实例。
+
+    Returns:
+        markdown 表格文本。
+    """
+    lines: list[str] = []
+    lines.append("| " + " | ".join(cell_to_markdown(h) for h in table.headers) + " |")
+    lines.append("|" + "|".join(["---" for _ in table.headers]) + "|")
+    for row in table.rows:
+        lines.append("| " + " | ".join(cell_to_markdown(c) for c in row) + " |")
+    return "\n".join(lines)
+
+
+def table_to_plain(table: Table) -> str:
+    """将 Table 还原为精简纯文本：无外管、无分隔行。
+
+    Args:
+        table: Table 实例。
+
+    Returns:
+        以空格分隔的精简表格文本。
+    """
+    lines: list[str] = []
+    lines.append(" | ".join(cell_to_markdown(h) for h in table.headers))
+    for row in table.rows:
+        lines.append(" | ".join(cell_to_markdown(c) for c in row))
+    return "\n".join(lines)
+
+
 def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
     """从 inline token 的 children 中提取 Span 列表。
 

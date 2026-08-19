@@ -152,3 +152,20 @@ class TestProcessChain:
         assert len(result) == 2
         assert result[0][0] is img
         assert result[0][1].text == "第一段"
+
+    def test_divider_split_with_cleaning(self):
+        """分隔线=切分 + 清洗：切分点两侧文本各自成条且清洗干净。"""
+        from render.chain import process_chain
+
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
+        result = asyncio.run(
+            process_chain(
+                [Plain("好，第一轮回顾 (。-`ω´-)\n\n---\n\n**测试 1：纯闲聊**")],
+                cfg, seg_cfg, _make_clean_cfg(), "/tmp",
+            )
+        )
+        assert result is not None
+        assert len(result) == 2
+        assert result[0][0].text == "好，第一轮回顾 (。-`ω´-)"
+        assert result[1][0].text == "测试 1：纯闲聊"

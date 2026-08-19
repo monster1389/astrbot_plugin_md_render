@@ -19,10 +19,11 @@ from render.parser import (
     CodeBlock,
     Divider,
     InlineExpr,
-    RichCell,
     Segment,
     Table,
     parse,
+    table_to_markdown,
+    table_to_plain,
 )
 from render.table import render_table
 from render.clean.md_cleaner import clean_markdown
@@ -55,47 +56,60 @@ _MODE_SPECS: dict[str, ModeSpec] = {
     "仅md文件":         ModeSpec(text=False, image=False, file=True),
 }
 
+# 无配置模式的元素（纯文本段 / 分隔线）固定只产纯文本
+_TEXT_ONLY = ModeSpec(text=True, image=False, file=False)
+
 
 @dataclass(frozen=True)
 class ElementSpec:
     """元素类型的渲染与文本配方。
 
     Attributes:
-        render: 渲染函数，返回 PNG bytes。
         text: 将 segment 还原为文本：清洗开启时产精简纯文本，否则产 markdown 原文。
+        render: 渲染函数，返回 PNG bytes；为 None 表示不渲染（纯文本元素）。
         prefix: 产物文件名前缀。
         supports_file: 是否支持产出 .md 文件。
+        mode_key: 该元素对应的 RenderConfig 模式字段名；为 None 表示固定产纯文本。
     """
-    render: Callable[[Any, str], bytes]
     text: Callable[[Any, CleanConfig | None], str]
-    prefix: str
-    supports_file: bool
+    render: Callable[[Any, str], bytes] | None = None
+    prefix: str | None = None
+    supports_file: bool = False
+    mode_key: str | None = None
 
 
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
-        render=render_code,
         text=lambda seg, cc: seg.code if (cc and cc.code) else f"```{seg.lang}\n{seg.code}\n```",
+        render=render_code,
         prefix="code",
         supports_file=True,
+        mode_key="code_mode",
     ),
     Table: ElementSpec(
+        text=lambda seg, cc: table_to_plain(seg) if (cc and cc.table) else table_to_markdown(seg),
         render=render_table,
-        text=lambda seg, cc: _table_to_plain(seg) if (cc and cc.table) else _table_to_text(seg),
         prefix="table",
         supports_file=True,
+        mode_key="table_mode",
     ),
     InlineExpr: ElementSpec(
-        render=render_expr,
         text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"${seg.expr}$",
+        render=render_expr,
         prefix="expr",
-        supports_file=False,
+        mode_key="expr_mode",
     ),
     BlockExpr: ElementSpec(
-        render=render_expr,
         text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"$$\n{seg.expr}\n$$",
+        render=render_expr,
         prefix="expr",
-        supports_file=False,
+        mode_key="expr_mode",
+    ),
+    Segment: ElementSpec(
+        text=lambda seg, cc: clean_markdown(seg.text, cc) if cc is not None else seg.text,
+    ),
+    Divider: ElementSpec(
+        text=lambda seg, cc: "\n\n---\n\n" if not (cc and cc.divider) else "\n\n",
     ),
 }
 
@@ -120,13 +134,19 @@ def _renderer_for(
     return spec.render
 
 
-def _mode_for(seg: Any, cfg: RenderConfig) -> str:
-    """读取 segment 对应的渲染模式。"""
-    if isinstance(seg, CodeBlock):
-        return cfg.code_mode
-    if isinstance(seg, Table):
-        return cfg.table_mode
-    return cfg.expr_mode  # InlineExpr / BlockExpr
+def _recipe_for(spec: ElementSpec, cfg: RenderConfig) -> ModeSpec:
+    """读取元素配方对应的产物配方。
+
+    Args:
+        spec: 元素配方。
+        cfg: 渲染配置。
+
+    Returns:
+        该元素本次应填充的产物配方；无模式字段的纯文本元素固定产文本。
+    """
+    if spec.mode_key is None:
+        return _TEXT_ONLY
+    return _MODE_SPECS[getattr(cfg, spec.mode_key)]
 
 
 def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
@@ -182,7 +202,7 @@ def _dispatch(
         data_dir: 插件数据目录路径。
     """
     spec = _ELEMENT_SPECS[type(seg)]
-    recipe = _MODE_SPECS[_mode_for(seg, cfg)]
+    recipe = _recipe_for(spec, cfg)
 
     # 渲染失败统一回退为原文
     if recipe.image and result is None:
@@ -200,7 +220,6 @@ def _dispatch(
 async def build_chain(
     segments: list[Any],
     cfg: RenderConfig,
-    seg_cfg: SegmentConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
     renderers: dict[type, Callable] | None = None,
@@ -212,7 +231,6 @@ async def build_chain(
     Args:
         segments: parser.parse() 输出的 Segment 列表。
         cfg: 渲染配置。
-        seg_cfg: 分段配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
         renderers: 渲染器覆盖层，为 None 或未覆盖时用元素配方默认渲染器。
@@ -224,11 +242,11 @@ async def build_chain(
     indices: list[int] = []
     coros: list[asyncio.Future] = []
     for i, seg in enumerate(segments):
-        if type(seg) not in _ELEMENT_SPECS:
+        spec = _ELEMENT_SPECS.get(type(seg))
+        if spec is None or spec.render is None:
             continue
-        if _MODE_SPECS[_mode_for(seg, cfg)].image:
+        if _recipe_for(spec, cfg).image:
             indices.append(i)
-            spec = _ELEMENT_SPECS[type(seg)]
             coros.append(asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg, data_dir))
 
     # 并发执行
@@ -249,20 +267,7 @@ async def build_chain(
     # 第二遍：按原顺序组装
     chain: list[Plain | Image | AstrFile] = []
     for i, seg in enumerate(segments):
-        if i in results:
-            _dispatch(chain, seg, results[i], cfg, clean_cfg, data_dir)
-        elif type(seg) in _ELEMENT_SPECS:
-            _dispatch(chain, seg, None, cfg, clean_cfg, data_dir)
-        elif isinstance(seg, Divider):
-            if seg_cfg.divider_mode == "不处理":
-                divider_text = "\n\n---\n\n" if not (clean_cfg and clean_cfg.divider) else "\n\n"
-                chain.append(Plain(divider_text))
-        elif isinstance(seg, Segment):
-            text = seg.text
-            if clean_cfg is not None:
-                text = clean_markdown(text, clean_cfg)
-            chain.append(Plain(text))
-
+        _dispatch(chain, seg, results.get(i), cfg, clean_cfg, data_dir)
     return chain
 
 
@@ -279,65 +284,6 @@ def _is_plain(comp: Any) -> bool:
         (hasattr(comp, "text") and type(comp).__name__ == "Plain")
         or (hasattr(comp, "type") and comp.type == "Plain")
     )
-
-
-def _cell_text(cell: RichCell) -> str:
-    """将单元格按装饰顺序还原为 markdown 文本。
-
-    Args:
-        cell: 富文本单元格。
-
-    Returns:
-        还原的 markdown 文本。
-    """
-    parts: list[str] = []
-    for span in cell.spans:
-        s = span.text
-        if span.code:
-            s = f"`{s}`"
-        if span.strike:
-            s = f"~~{s}~~"
-        if span.italic:
-            s = f"*{s}*"
-        if span.bold:
-            s = f"**{s}**"
-        if span.link_url:
-            s = f"[{s}]({span.link_url})"
-        parts.append(s)
-    return "".join(parts)
-
-
-def _table_to_text(table: Table) -> str:
-    """将 Table 还原为 markdown 表格原文。
-
-    Args:
-        table: Table 实例。
-
-    Returns:
-        markdown 表格文本。
-    """
-    lines: list[str] = []
-    lines.append("| " + " | ".join(_cell_text(h) for h in table.headers) + " |")
-    lines.append("|" + "|".join(["---" for _ in table.headers]) + "|")
-    for row in table.rows:
-        lines.append("| " + " | ".join(_cell_text(c) for c in row) + " |")
-    return "\n".join(lines)
-
-
-def _table_to_plain(table: Table) -> str:
-    """将 Table 还原为精简纯文本：无外管、无分隔行。
-
-    Args:
-        table: Table 实例。
-
-    Returns:
-        以空格分隔的精简表格文本。
-    """
-    lines: list[str] = []
-    lines.append(" | ".join(_cell_text(h) for h in table.headers))
-    for row in table.rows:
-        lines.append(" | ".join(_cell_text(c) for c in row))
-    return "\n".join(lines)
 
 
 def group_segments(
@@ -466,9 +412,9 @@ async def process_chain(
 
     segments = parse(full_text, split_blank_lines=(seg_cfg.blank_line_mode == "切分"))
 
-    has_elements = any(
-        type(s) in _ELEMENT_SPECS or isinstance(s, Divider) for s in segments
-    )
+    # 结构性元素（纯文本段以外的类型）才值得走渲染管线；
+    # 纯文本段无清洗、无切分时短路，原样保留消息链。
+    has_elements = any(not isinstance(s, Segment) for s in segments)
     needs_cleaning = clean_cfg is not None and any(vars(clean_cfg).values())
     needs_split = (
         (seg_cfg.blank_line_mode == "切分" or seg_cfg.divider_mode == "切分")
@@ -481,7 +427,7 @@ async def process_chain(
     non_plain = [c for c in chain if not _is_plain(c)]
 
     built_groups = list(await asyncio.gather(
-        *(build_chain(g, cfg, seg_cfg, clean_cfg, data_dir, renderers) for g in groups)
+        *(build_chain(g, cfg, clean_cfg, data_dir, renderers) for g in groups)
     ))
 
     return assemble_messages(built_groups, non_plain)
