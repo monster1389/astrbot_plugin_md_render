@@ -2,7 +2,7 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Plain, Image, File
 
 from render.utils import RenderConfig
 
@@ -105,3 +105,15 @@ class TestDeliver:
             asyncio.run(deliver(send, messages, _make_cfg(send_delay=True)))
         send.assert_awaited_once()
         mock_uniform.assert_called_once()
+
+    def test_summarize(self):
+        """日志摘要：文本截断、图片文件名、文件名称、空文本。"""
+        from render.deliver import _summarize
+
+        assert _summarize([Plain("短文本")]) == "文本「短文本」"
+        assert _summarize([Plain("x" * 30)]) == "文本「" + "x" * 24 + "…」"
+        assert _summarize([Plain("")]) == "空"
+        assert _summarize([Plain("   ")]) == "空"
+        assert _summarize([Image.fromFileSystem("/tmp/code_123.png")]) == "图片 code_123.png"
+        assert _summarize([Image.fromBytes(b"png")]) == "图片"
+        assert _summarize([File(name="x.md", file="/tmp/x.md")]) == "文件 x.md"
