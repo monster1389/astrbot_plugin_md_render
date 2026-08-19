@@ -1,6 +1,6 @@
 """消息链组装与分段测试。"""
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
@@ -152,6 +152,30 @@ class TestBuildChain:
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像")
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: fake}))
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
+
+    @patch("render.expr.Image")
+    @patch("render.expr.RenderLaTeX")
+    @patch("render.expr.GetLaTeXObjs")
+    def test_inline_expr_real_renderer_contract(self, mock_getlatex, mock_render, mock_pil_image):
+        """真实 render_expr 经 build_chain 统一契约调用，不抛参数不匹配。"""
+        from render.chain import build_chain
+        from render.expr import render_expr
+
+        mock_getlatex.return_value = MagicMock()
+        mock_render_img = MagicMock()
+        mock_render_img.size = (100, 20)
+        mock_render_img.split.return_value = (None, None, None, MagicMock())
+        mock_render.return_value.img = mock_render_img
+        mock_result = MagicMock()
+        mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
+        mock_pil_image.new.return_value = mock_result
+
+        segments = [InlineExpr(expr="E=mc^2")]
+        cfg = _make_cfg(expr_mode="渲染图像")
+        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: render_expr}))
+
         assert len(result) == 1
         assert isinstance(result[0], Image)
 

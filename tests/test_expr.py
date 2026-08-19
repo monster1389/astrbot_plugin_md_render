@@ -24,7 +24,7 @@ class TestRenderExpr:
         mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
-        png_bytes = render_expr(InlineExpr(expr="E=mc^2"))
+        png_bytes = render_expr(InlineExpr(expr="E=mc^2"), "/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
@@ -50,7 +50,7 @@ class TestRenderExpr:
         mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
         mock_pil_image.new.return_value = mock_result
 
-        png_bytes = render_expr(BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1"))
+        png_bytes = render_expr(BlockExpr(expr="\\int_0^\\infty e^{-x} dx = 1"), "/tmp")
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
