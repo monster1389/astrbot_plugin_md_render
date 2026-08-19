@@ -1,6 +1,9 @@
 """送达模块。
 
 按序发送除末条外的所有消息，末条留作 result.chain 原地展示。
+
+每条发送完成后立即删除其临时文件（文件在发送时已被读走）；
+末条交棒前刷新其临时文件时间戳，保证清理线程不误删尚未发出的文件。
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 
 from render.chain import has_media
-from render.utils import SegmentConfig
+from render.utils import SegmentConfig, is_temp_file
 
 # 发送延时范围（秒）：媒体消息 1~3s 防风控，纯文本 0.3~1s
 _DELAY_RANGES: dict[bool, tuple[float, float]] = {
@@ -33,6 +36,53 @@ def _has_content(comps: list) -> bool:
     if has_media(comps):
         return True
     return any((c.text or "").strip() for c in comps)
+
+
+def _temp_paths(comps: list) -> list[str]:
+    """收集组件中本插件生成的临时磁盘文件路径（去重）。
+
+    只匹配 code/table/expr_时间戳.{png,md} 命名模式，避免误伤
+    消息链中用户或 LLM 的原始图片等外部文件。
+
+    Args:
+        comps: 消息组件列表。
+
+    Returns:
+        匹配本插件临时文件命名模式的磁盘路径列表。
+    """
+    paths = []
+    for c in comps:
+        for attr in ("path", "file_"):
+            p = getattr(c, attr, None)
+            if isinstance(p, str) and p and is_temp_file(p):
+                paths.append(p)
+    return list(dict.fromkeys(paths))
+
+
+def _delete_temp_files(comps: list) -> None:
+    """删除消息中本插件生成的临时磁盘文件，已不存在则忽略。
+
+    Args:
+        comps: 消息组件列表。
+    """
+    for path in _temp_paths(comps):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _touch_temp_files(comps: list) -> None:
+    """刷新消息中本插件生成的临时磁盘文件的写盘时间，延长存活窗口。
+
+    Args:
+        comps: 消息组件列表。
+    """
+    for path in _temp_paths(comps):
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
 
 
 def _summarize(comps: list) -> str:
@@ -88,6 +138,9 @@ async def deliver(
             continue
         await send(message)
         logger.debug("第 %d/%d 条已发送 %s", i, n, _summarize(message))
+        _delete_temp_files(message)
         if cfg.send_delay:
             await asyncio.sleep(random.uniform(*_DELAY_RANGES[has_media(message)]))
-    return messages[-1]
+    tail = messages[-1]
+    _touch_temp_files(tail)
+    return tail

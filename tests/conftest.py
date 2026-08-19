@@ -43,6 +43,7 @@ class MockImage:
     def fromFileSystem(path: str):
         img = MockImage()
         img.file = path
+        img.path = path  # 与真实 Image.fromFileSystem 一致：path 为绝对路径
         return img
 
     @staticmethod
@@ -55,6 +56,7 @@ class MockFile:
     def __init__(self, name: str = "", file: str = ""):
         self.name = name
         self.file = file
+        self.file_ = file  # 与真实 File 一致：file_ 为本地路径
 
 _mock_msg_comp = types.ModuleType("astrbot.api.message_components")
 _mock_msg_comp.Plain = MockPlain

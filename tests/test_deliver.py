@@ -113,3 +113,66 @@ class TestDeliver:
         assert _summarize([Image.fromFileSystem("/tmp/code_123.png")]) == "图片 code_123.png"
         assert _summarize([Image.fromBytes(b"png")]) == "图片"
         assert _summarize([File(name="x.md", file="/tmp/x.md")]) == "文件 x.md"
+
+
+class TestTempFileLifecycle:
+    """临时文件生命周期：发送完成即删，尾条交棒前刷新。"""
+
+    def test_deletes_temp_files_after_send(self):
+        """发送完成的条目的临时文件立即删除。"""
+        from render.deliver import deliver
+
+        temp_png = "/tmp/test_md_render/temp/code_20260819_114940_123456.png"
+        img = Image.fromFileSystem(temp_png)
+        send = AsyncMock()
+        with patch("render.deliver.os.remove") as mock_remove, \
+                patch("render.deliver.os.utime") as mock_utime:
+            asyncio.run(deliver(send, [[img], [Plain("尾")]], _make_cfg(send_delay=False)))
+        mock_remove.assert_called_once_with(temp_png)
+        mock_utime.assert_not_called()
+
+    def test_touches_tail_temp_files(self):
+        """尾条的临时文件交棒前刷新时间戳、不删除。"""
+        from render.deliver import deliver
+
+        temp_md = "/tmp/test_md_render/temp/table_20260819_114940_123456.md"
+        md = File(name="table.md", file=temp_md)
+        send = AsyncMock()
+        with patch("render.deliver.os.remove") as mock_remove, \
+                patch("render.deliver.os.utime") as mock_utime:
+            result = asyncio.run(deliver(send, [[Plain("A")], [md]], _make_cfg(send_delay=False)))
+        mock_remove.assert_not_called()
+        mock_utime.assert_called_once_with(temp_md, None)
+        assert result[0] is md
+
+    def test_single_message_tail_touched_not_sent(self):
+        """单条消息全部留尾：不发送、只刷新时间戳。"""
+        from render.deliver import deliver
+
+        temp_png = "/tmp/test_md_render/temp/code_20260819_114940_123456.png"
+        img = Image.fromFileSystem(temp_png)
+        send = AsyncMock()
+        with patch("render.deliver.os.remove") as mock_remove, \
+                patch("render.deliver.os.utime") as mock_utime:
+            result = asyncio.run(deliver(send, [[img]], _make_cfg(send_delay=False)))
+        send.assert_not_called()
+        mock_remove.assert_not_called()
+        mock_utime.assert_called_once_with(temp_png, None)
+        assert result[0] is img
+
+    def test_ignores_foreign_files(self):
+        """非本插件临时文件（用户原始图片等）不被删除或刷新。"""
+        from render.deliver import deliver
+
+        foreign = Image.fromFileSystem("/tmp/user_photo.png")
+        temp_png = "/tmp/test_md_render/temp/expr_20260819_114940_123456.png"
+        send = AsyncMock()
+        with patch("render.deliver.os.remove") as mock_remove, \
+                patch("render.deliver.os.utime") as mock_utime:
+            asyncio.run(deliver(
+                send,
+                [[foreign, Image.fromFileSystem(temp_png)], [Plain("尾")]],
+                _make_cfg(send_delay=False),
+            ))
+        mock_remove.assert_called_once_with(temp_png)
+        mock_utime.assert_not_called()

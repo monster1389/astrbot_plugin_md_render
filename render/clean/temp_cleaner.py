@@ -1,40 +1,21 @@
 """临时文件清理。
 
-周期性扫描 temp/ 目录，按配置的存活时长删除过期渲染文件。
+周期性扫描 temp/ 目录，按文件实际写盘时间与配置的存活时长删除过期渲染文件。
+文件由 deliver 在发送完成后删除；此处时间窗只兜底尾条与异常中断残留的文件。
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-import re
 from datetime import datetime
+
+from render.utils import is_temp_file
 
 logger = logging.getLogger(__name__)
 
-_FILENAME_RE = re.compile(
-    r"^(code|table|expr)_(\d{8})_(\d{6})_\d{6}\.(png|md)$"
-)
-
-
-def _parse_file_ts(filename: str) -> datetime | None:
-    """从渲染产物文件名解析时间戳。
-
-    Args:
-        filename: 文件名，如 table_20260624_114940_123456.png。
-
-    Returns:
-        解析出的 datetime，格式不符返回 None。
-    """
-    m = _FILENAME_RE.match(filename)
-    if not m:
-        return None
-    date_part = m.group(2)
-    time_part = m.group(3)
-    try:
-        return datetime.strptime(f"{date_part}_{time_part}", "%Y%m%d_%H%M%S")
-    except ValueError:
-        return None
+# 存活 0 分钟时按一个清扫周期（60 秒）兜底，避免误删尚未发送的渲染产物
+_MIN_TTL_MINUTES = 1.0
 
 
 def _scan_and_clean(
@@ -44,7 +25,7 @@ def _scan_and_clean(
 
     Args:
         temp_dir: 临时文件目录路径。
-        ttl_minutes: 存活时长（分钟）。0=立即删，-1=不删。
+        ttl_minutes: 存活时长（分钟）。0=尽快删除（最短保留 1 分钟），-1=不删。
         _now: 当前时间（仅测试用，默认取系统时间）。
     """
     if ttl_minutes < 0:
@@ -56,14 +37,17 @@ def _scan_and_clean(
         return
 
     now = _now if _now is not None else datetime.now()
+    effective_ttl = _MIN_TTL_MINUTES if ttl_minutes == 0 else float(ttl_minutes)
     for name in filenames:
-        ts = _parse_file_ts(name)
-        if ts is None:
+        if not is_temp_file(name):
             continue
-
-        age_minutes = (now - ts).total_seconds() / 60.0
-        if ttl_minutes == 0 or age_minutes >= ttl_minutes:
-            path = os.path.join(temp_dir, name)
+        path = os.path.join(temp_dir, name)
+        try:
+            mtime = datetime.fromtimestamp(os.path.getmtime(path))
+        except OSError:
+            continue
+        age_minutes = (now - mtime).total_seconds() / 60.0
+        if age_minutes >= effective_ttl:
             try:
                 os.remove(path)
                 logger.debug("已清理过期临时文件: %s", name)
@@ -95,7 +79,7 @@ def start(data_dir: str, ttl_minutes: int) -> None:
 
     Args:
         data_dir: 插件数据目录路径。
-        ttl_minutes: 存活时长（分钟）。0=立即清理，-1=不启动。
+        ttl_minutes: 存活时长（分钟）。0=尽快删除，-1=不启动。
     """
     global _cleanup_task
     if ttl_minutes < 0:
