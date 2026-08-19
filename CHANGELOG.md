@@ -2,6 +2,16 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.3.2] - 2026-08-20
+
+### 重构
+- 元素配方表 `_ELEMENT_SPECS` 统一覆盖全部元素类型（含纯文本段、分隔线），按 `(类型, mode_key)` 单一模型查产物配方，删除 `_mode_for` 的静默兜底。
+- 表格还原函数 `cell_to_markdown` / `table_to_markdown` / `table_to_plain` 移入 `parser.py`，与表格数据模型同住。
+- `build_chain` 移除无用的 `seg_cfg` 参数（分隔线切分由 `group_segments` 先行消费）。
+- 修正 `process_chain` 的元素判断，避免纯文本段纳入配方表后被误判为结构性元素。
+
+> 本版本为纯内部重构，用户可见行为与 1.3.1 一致。
+
 ## [1.3.1] - 2026-08-19
 
 ### 修复
