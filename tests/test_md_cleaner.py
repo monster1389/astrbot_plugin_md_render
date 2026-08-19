@@ -47,7 +47,7 @@ class TestCleanAllOn:
 
     def test_clean_heading_preserves_paragraph_break(self):
         """清洗标题后保留与后续段落的 \n\n。"""
-        assert clean_markdown("# 标题\n\n内容", _cfg()) == "标题\n\n内容"
+        assert clean_markdown("# 标题\n\n内容", _cfg(blank_line=False)) == "标题\n\n内容"
 
     def test_clean_heading_at_end_no_trailing(self):
         """标题在文末无后续内容时不追加 \n\n。"""
@@ -72,7 +72,7 @@ class TestCleanAllOn:
 
     def test_clean_blockquote_preserves_paragraph_break(self):
         """清洗引用后保留与后续段落的段落分隔。"""
-        result = clean_markdown("> 1% 用户 → 没问题\n\n每个阶段", _cfg())
+        result = clean_markdown("> 1% 用户 → 没问题\n\n每个阶段", _cfg(blank_line=False))
         assert result == "1% 用户 → 没问题\n\n每个阶段"
 
     def test_clean_mixed_format(self):
@@ -147,3 +147,25 @@ class TestEdgeCases:
         assert "列表1" in result
         assert "#" not in result
         assert "**" not in result
+
+
+class TestDividerAndBlankLine:
+    def test_divider_clean_removes_mark(self):
+        """清洗分隔线：独立 --- 行删除，段落分隔保留。"""
+        assert clean_markdown("上\n\n---\n\n下", _cfg(blank_line=False)) == "上\n\n下"
+
+    def test_divider_clean_off_keeps_mark(self):
+        """清洗分隔线关：--- 行保留。"""
+        assert clean_markdown("上\n\n---\n\n下", _cfg(divider=False, blank_line=False)) == "上\n\n---\n\n下"
+
+    def test_blank_line_collapse(self):
+        """清洗连续换行：空行压为单个换行。"""
+        assert clean_markdown("上\n\n下", _cfg()) == "上\n下"
+
+    def test_blank_line_off_keeps_break(self):
+        """清洗连续换行关：空行保留。"""
+        assert clean_markdown("上\n\n下", _cfg(blank_line=False)) == "上\n\n下"
+
+    def test_divider_and_blank_line_compose(self):
+        """分隔线 + 连续换行同时清洗：--- 消失且空行压平。"""
+        assert clean_markdown("上\n\n---\n\n下", _cfg()) == "上\n下"

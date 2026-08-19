@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 
 from render.chain import has_media
-from render.utils import RenderConfig
+from render.utils import SegmentConfig
 
 # 发送延时范围（秒）：媒体消息 1~3s 防风控，纯文本 0.3~1s
 _DELAY_RANGES: dict[bool, tuple[float, float]] = {
@@ -66,7 +66,7 @@ def _summarize(comps: list) -> str:
 async def deliver(
     send: Callable[[list], Awaitable[None]],
     messages: list[list],
-    cfg: RenderConfig,
+    cfg: SegmentConfig,
 ) -> list:
     """按序发送除末条外的所有消息，末条留作返回。
 
@@ -77,7 +77,7 @@ async def deliver(
     Args:
         send: 发送一条消息的异步回调。
         messages: build_chain 产出的消息列表。
-        cfg: 渲染配置。
+        cfg: 分段配置。
 
     Returns:
         末条消息组件列表，作为 result.chain 留尾。

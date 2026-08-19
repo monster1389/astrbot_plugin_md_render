@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, RichCell, Segment, Span, Table
-from render.utils import RenderConfig, CleanConfig
+from render.utils import RenderConfig, SegmentConfig, CleanConfig
 
 
 def _make_cfg(**overrides):
@@ -14,11 +14,23 @@ def _make_cfg(**overrides):
         "code_mode": "不处理",
         "table_mode": "不处理",
         "expr_mode": "不处理",
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
         "temp_ttl": 5,
     }
     return RenderConfig(**(defaults | overrides))
+
+
+def _make_seg_cfg(**overrides):
+    """构造测试用 SegmentConfig，支持按需覆盖。"""
+    defaults = {
+        "divider_mode": "不处理",
+        "blank_line_mode": "不处理",
+        "send_delay": False,
+    }
+    return SegmentConfig(**(defaults | overrides))
+
+
+# 默认分段配置：不切分、无延时。需定制的用例在方法内局部覆盖。
+seg_cfg = _make_seg_cfg()
 
 
 def _make_clean_cfg(**overrides):
@@ -38,7 +50,7 @@ class TestBuildChain:
 
         segments = [Segment(text="Hello")]
         cfg = _make_cfg()
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "Hello"
@@ -49,7 +61,7 @@ class TestBuildChain:
 
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="不处理")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
@@ -61,7 +73,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
@@ -72,7 +84,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
 
@@ -83,7 +95,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert "x=1" in result[0].text
@@ -96,7 +108,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={Table: fake}))
         assert isinstance(result[0], Image)
 
     def test_divider_split_mode_consumes_divider(self):
@@ -104,8 +116,9 @@ class TestBuildChain:
         from render.chain import build_chain
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
-        cfg = _make_cfg(divider_mode="切分")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp"))
         assert len(result) == 2
         assert all(isinstance(c, Plain) for c in result)
         assert result[0].text == "上"
@@ -116,31 +129,43 @@ class TestBuildChain:
         from render.chain import build_chain
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
-        cfg = _make_cfg(divider_mode="不处理")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        cfg = _make_cfg()
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp"))
         assert len(result) == 3
         assert isinstance(result[1], Plain)
         assert "---" in result[1].text
 
-    def test_divider_noop_with_cleaning_keeps_breaks(self):
-        """分隔线不处理 + 清洗：Divider 输出 \\n\\n---\\n\\n 保证段落分隔。"""
+    def test_divider_noop_with_cleaning_removes_mark(self):
+        """分隔线不处理 + 清洗分隔线开：去掉 --- 标记，保留段落分隔。"""
         from render.chain import build_chain
 
         segments = [Segment(text="前面\n\n"), Divider(), Segment(text="**后面**")]
-        cfg = _make_cfg(divider_mode="不处理")
+        cfg = _make_cfg()
         clean_cfg = _make_clean_cfg()
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         full = "".join(c.text for c in result)
-        assert "前面\n\n---\n\n后面" in full
+        assert "---" not in full
+        assert "前面\n\n后面" in full
+
+    def test_divider_noop_without_cleaning_keeps_mark(self):
+        """分隔线不处理 + 清洗分隔线关：保留 --- 标记。"""
+        from render.chain import build_chain
+
+        segments = [Segment(text="上"), Divider(), Segment(text="下")]
+        cfg = _make_cfg()
+        clean_cfg = _make_clean_cfg(divider=False)
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
+        assert "---" in "".join(c.text for c in result)
 
     def test_divider_split_with_cleaning_no_trailing_newlines(self):
         """切分模式 + 清洗：不追加换行，段尾干净。"""
         from render.chain import build_chain
 
         segments = [Segment(text="好，第一轮回顾 (。-`ω´-)\n\n"), Divider(), Segment(text="**测试 1：纯闲聊**")]
-        cfg = _make_cfg(divider_mode="切分")
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
         clean_cfg = _make_clean_cfg()
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert isinstance(result[1], Plain)
@@ -154,7 +179,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={InlineExpr: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
@@ -165,7 +190,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [BlockExpr(expr="\\int x dx")]
         cfg = _make_cfg(expr_mode="不处理")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={BlockExpr: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={BlockExpr: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "$$" in result[0].text
@@ -179,11 +204,10 @@ class TestBuildChain:
         fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
             code_mode="渲染图像", table_mode="不处理",
-            expr_mode="不处理", divider_mode="不处理",
-            blank_line_mode="不处理", temp_ttl=5,
+            expr_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert isinstance(result[0], Plain)
         assert "```py" in result[0].text
         assert isinstance(result[1], Plain)
@@ -197,11 +221,10 @@ class TestBuildChain:
         fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
             code_mode="渲染且保留原文", table_mode="不处理",
-            expr_mode="不处理", divider_mode="不处理",
-            blank_line_mode="不处理", temp_ttl=5,
+            expr_mode="不处理", temp_ttl=5,
         )
         segments = [CodeBlock(lang="py", code="x=1")]
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
 
@@ -212,7 +235,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="仅md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
         fake.assert_not_called()
@@ -224,7 +247,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="仅md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 1
         assert isinstance(result[0], AstrFile)
         fake.assert_not_called()
@@ -236,7 +259,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染且md文件")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Image)
         assert isinstance(result[1], AstrFile)
@@ -248,7 +271,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
@@ -262,7 +285,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])]
         cfg = _make_cfg(table_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={Table: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={Table: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
@@ -276,7 +299,7 @@ class TestBuildChain:
         fake = MagicMock(return_value=b"fake_png_data")
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像", temp_ttl=0)
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={InlineExpr: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={InlineExpr: fake}))
         assert len(result) == 1
         img = result[0]
         assert isinstance(img, Image)
@@ -292,7 +315,7 @@ class TestBuildChainWithCleaning:
         segments = [Segment(text="**粗体** 普通 *斜体*")]
         cfg = _make_cfg()
         clean_cfg = _make_clean_cfg()
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "粗体 普通 斜体"
@@ -303,7 +326,7 @@ class TestBuildChainWithCleaning:
 
         segments = [Segment(text="**粗体**")]
         cfg = _make_cfg()
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp"))
         assert result[0].text == "**粗体**"
 
     def test_cleaning_all_off_preserves_text(self):
@@ -316,7 +339,7 @@ class TestBuildChainWithCleaning:
                                      inline_code=False, link=False, heading=False,
                                      list_unordered=False, list_ordered=False,
                                      blockquote=False, image=False)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert result[0].text == "**粗体**"
 
     def test_code_render_unaffected_by_cleaning(self):
@@ -327,7 +350,7 @@ class TestBuildChainWithCleaning:
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="**尾注**")]
         cfg = _make_cfg(code_mode="渲染图像")
         clean_cfg = _make_clean_cfg()
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Image)  # 代码块正常渲染
         assert isinstance(result[1], Plain)
@@ -340,7 +363,7 @@ class TestBuildChainWithCleaning:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="不处理")
         clean_cfg = _make_clean_cfg(code=True)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "x=1"
@@ -352,7 +375,7 @@ class TestBuildChainWithCleaning:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="不处理")
         clean_cfg = _make_clean_cfg()  # code=False by default
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert "```py" in result[0].text
 
     def test_clean_code_with_keep_original(self):
@@ -363,7 +386,7 @@ class TestBuildChainWithCleaning:
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染且保留原文")
         clean_cfg = _make_clean_cfg(code=True)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 2
         assert isinstance(result[0], Plain)
         assert result[0].text == "x=1"
@@ -386,7 +409,7 @@ class TestBuildChainWithCleaning:
         segments = [tbl]
         cfg = _make_cfg(table_mode="不处理")
         clean_cfg = _make_clean_cfg(table=True)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert "名称 | 版本" in result[0].text
@@ -400,7 +423,7 @@ class TestBuildChainWithCleaning:
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="不处理")
         clean_cfg = _make_clean_cfg(expr=True)
-        result = asyncio.run(build_chain(segments, cfg, clean_cfg, "/tmp"))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, clean_cfg, "/tmp"))
         assert len(result) == 1
         assert isinstance(result[0], Plain)
         assert result[0].text == "E=mc^2"
@@ -473,8 +496,7 @@ class TestGroupSegments:
         from render.chain import group_segments
 
         segments = [Segment(text="只有一段")]
-        cfg = _make_cfg()
-        groups = group_segments(segments, cfg)
+        groups = group_segments(segments, seg_cfg)
         assert len(groups) == 1
         assert groups[0] == segments
 
@@ -483,8 +505,8 @@ class TestGroupSegments:
         from render.chain import group_segments
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
-        cfg = _make_cfg(divider_mode="切分")
-        groups = group_segments(segments, cfg)
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
+        groups = group_segments(segments, seg_cfg)
         assert len(groups) == 2
         assert groups[0] == [Segment(text="上")]
         assert groups[1] == [Segment(text="下")]
@@ -494,8 +516,8 @@ class TestGroupSegments:
         from render.chain import group_segments
 
         segments = [Segment(text="上"), Divider(), Segment(text="下")]
-        cfg = _make_cfg(divider_mode="不处理")
-        groups = group_segments(segments, cfg)
+        seg_cfg = _make_seg_cfg(divider_mode="不处理")
+        groups = group_segments(segments, seg_cfg)
         assert len(groups) == 1
         assert isinstance(groups[0][1], Divider)
 
@@ -504,8 +526,8 @@ class TestGroupSegments:
         from render.chain import group_segments
 
         segments = [Segment(text="第一段"), Segment(text="第二段"), Segment(text="第三段")]
-        cfg = _make_cfg(blank_line_mode="切分")
-        groups = group_segments(segments, cfg)
+        seg_cfg = _make_seg_cfg(blank_line_mode="切分")
+        groups = group_segments(segments, seg_cfg)
         assert len(groups) == 3
         assert [g[0].text for g in groups] == ["第一段", "第二段", "第三段"]
 
@@ -518,8 +540,8 @@ class TestGroupSegments:
             CodeBlock(lang="py", code="x=1"),
             Segment(text="后"),
         ]
-        cfg = _make_cfg(blank_line_mode="切分")
-        groups = group_segments(segments, cfg)
+        seg_cfg = _make_seg_cfg(blank_line_mode="切分")
+        groups = group_segments(segments, seg_cfg)
         assert len(groups) == 1
         assert len(groups[0]) == 3
 
@@ -633,7 +655,7 @@ class TestRenderInjection:
         fake = MagicMock(return_value=b"fake_png")
         segments = [CodeBlock(lang="py", code="x=1")]
         cfg = _make_cfg(code_mode="渲染图像")
-        result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
+        result = asyncio.run(build_chain(segments, cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}))
         fake.assert_called_once()
         assert len(result) == 1
         assert isinstance(result[0], Image)
@@ -647,7 +669,7 @@ class TestRenderInjection:
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code_mode="渲染图像")
         result = asyncio.run(process_chain(
-            [Plain("```py\nx=1\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake}
+            [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}
         ))
         fake.assert_called_once()
         assert isinstance(result[0][0], Image)

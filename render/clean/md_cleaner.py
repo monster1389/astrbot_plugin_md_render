@@ -44,6 +44,8 @@ def clean_markdown(text: str, cfg: CleanConfig) -> str:
         rules.append("list")
     if flags["blockquote"]:
         rules.append("blockquote")
+    if flags["divider"]:
+        rules.append("hr")
 
     md = MarkdownIt("zero").enable(rules)
     md.options["html"] = False
@@ -57,6 +59,8 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
     parts: list[str] = []
     link_href: str = ""
     list_counter: int = 0
+    # 段落分隔符：连续换行清洗开时压为单个换行
+    sep = "\n" if cfg.blank_line else "\n\n"
 
     i = 0
     while i < len(tokens):
@@ -83,13 +87,13 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
             if not cfg.heading:
                 parts.append(t.markup)
             elif i + 1 < len(tokens):
-                parts.append("\n\n")
+                parts.append(sep)
         elif t.type == "blockquote_open":
             if not cfg.blockquote:
                 parts.append("> ")
         elif t.type == "blockquote_close":
             if cfg.blockquote and i + 1 < len(tokens):
-                parts.append("\n\n")
+                parts.append(sep)
             elif not cfg.blockquote:
                 parts.append("")
 
@@ -101,7 +105,7 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
         elif t.type == "bullet_list_close":
             parent_type = None
             if i + 1 < len(tokens):
-                parts.append("\n\n")
+                parts.append(sep)
         elif t.type == "ordered_list_open":
             if not cfg.list_ordered:
                 parent_type = "ordered_list"
@@ -111,7 +115,7 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
         elif t.type == "ordered_list_close":
             parent_type = None
             if i + 1 < len(tokens):
-                parts.append("\n\n")
+                parts.append(sep)
         elif t.type == "list_item_open":
             if parent_type == "bullet_list":
                 parts.append("- ")
@@ -129,14 +133,15 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
                 "heading_close", "blockquote_close", "list_item_close",
                 "bullet_list_close", "ordered_list_close", "paragraph_close",
             ):
-                parts.append("\n\n")
+                parts.append(sep)
         elif t.type == "hardbreak":
             parts.append("\n")
         elif t.type == "softbreak":
             parts.append("\n")
 
         elif t.type == "hr":
-            parts.append("---")
+            if not cfg.divider:
+                parts.append("---")
         elif t.type == "image":
             if cfg.image:
                 alt = t.content or ""

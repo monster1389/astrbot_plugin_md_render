@@ -87,6 +87,7 @@ def _make_plugin(context: MagicMock):
 
     plugin = MdRenderPlugin(context=context, config={})
     plugin.cfg = MagicMock()
+    plugin.seg_cfg = MagicMock()
     plugin.clean_cfg = None
     return plugin
 
@@ -125,6 +126,7 @@ class TestProcessChainWiring:
         context.send_message = AsyncMock()
 
         cfg = MagicMock()
+        seg_cfg = MagicMock()
 
         with patch("main.process_chain", AsyncMock(return_value=messages)) as mock_pc, \
                 patch("main.deliver", AsyncMock(return_value=tail)) as mock_deliver, \
@@ -132,14 +134,15 @@ class TestProcessChainWiring:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
             plugin = _make_plugin(context)
             plugin.cfg = cfg
+            plugin.seg_cfg = seg_cfg
             asyncio.run(plugin.on_decorating_result(event))
 
         mock_pc.assert_awaited_once_with(
-            original_chain, cfg, None, "/tmp/test_md_render"
+            original_chain, cfg, seg_cfg, None, "/tmp/test_md_render"
         )
         assert mock_deliver.await_count == 1
         assert mock_deliver.await_args[0][1] is messages
-        assert mock_deliver.await_args[0][2] is cfg
+        assert mock_deliver.await_args[0][2] is seg_cfg
         assert event.get_result.return_value.chain is tail
 
     def test_send_callback_routes_to_context(self):

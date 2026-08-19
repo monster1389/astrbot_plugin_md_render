@@ -26,7 +26,7 @@ from render.parser import (
 )
 from render.table import render_table
 from render.clean.md_cleaner import clean_markdown
-from render.utils import RenderConfig, CleanConfig, build_temp_path
+from render.utils import RenderConfig, SegmentConfig, CleanConfig, build_temp_path
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,7 @@ def _dispatch(
 async def build_chain(
     segments: list[Any],
     cfg: RenderConfig,
+    seg_cfg: SegmentConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
     renderers: dict[type, Callable] | None = None,
@@ -211,6 +212,7 @@ async def build_chain(
     Args:
         segments: parser.parse() 输出的 Segment 列表。
         cfg: 渲染配置。
+        seg_cfg: 分段配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
         renderers: 渲染器覆盖层，为 None 或未覆盖时用元素配方默认渲染器。
@@ -252,8 +254,9 @@ async def build_chain(
         elif type(seg) in _ELEMENT_SPECS:
             _dispatch(chain, seg, None, cfg, clean_cfg, data_dir)
         elif isinstance(seg, Divider):
-            if cfg.divider_mode == "不处理":
-                chain.append(Plain("\n\n---\n\n"))
+            if seg_cfg.divider_mode == "不处理":
+                divider_text = "\n\n---\n\n" if not (clean_cfg and clean_cfg.divider) else "\n\n"
+                chain.append(Plain(divider_text))
         elif isinstance(seg, Segment):
             text = seg.text
             if clean_cfg is not None:
@@ -339,7 +342,7 @@ def _table_to_plain(table: Table) -> str:
 
 def group_segments(
     segments: list[Any],
-    cfg: RenderConfig,
+    seg_cfg: SegmentConfig,
 ) -> list[list[Any]]:
     """按切分配置将 segments 分组为多条独立消息。
 
@@ -349,7 +352,7 @@ def group_segments(
 
     Args:
         segments: parser.parse() 输出的片段列表。
-        cfg: 渲染配置。
+        seg_cfg: 分段配置。
 
     Returns:
         消息分组列表，每组为一段待独立发送的片段列表。
@@ -358,7 +361,7 @@ def group_segments(
     current: list[Any] = []
     for seg in segments:
         if isinstance(seg, Divider):
-            if cfg.divider_mode == "切分":
+            if seg_cfg.divider_mode == "切分":
                 if current:
                     groups.append(current)
                     current = []
@@ -366,7 +369,7 @@ def group_segments(
             current.append(seg)
             continue
         if (
-            cfg.blank_line_mode == "切分"
+            seg_cfg.blank_line_mode == "切分"
             and current
             and isinstance(current[-1], Segment)
             and isinstance(seg, Segment)
@@ -432,6 +435,7 @@ def assemble_messages(
 async def process_chain(
     chain: list[Any],
     cfg: RenderConfig,
+    seg_cfg: SegmentConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
     renderers: dict[type, Callable] | None = None,
@@ -444,6 +448,7 @@ async def process_chain(
     Args:
         chain: 原始消息链组件列表。
         cfg: 渲染配置。
+        seg_cfg: 分段配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
         renderers: 渲染器覆盖层，透传给 build_chain。
@@ -459,24 +464,24 @@ async def process_chain(
     if not full_text.strip():
         return None
 
-    segments = parse(full_text, split_blank_lines=(cfg.blank_line_mode == "切分"))
+    segments = parse(full_text, split_blank_lines=(seg_cfg.blank_line_mode == "切分"))
 
     has_elements = any(
         type(s) in _ELEMENT_SPECS or isinstance(s, Divider) for s in segments
     )
     needs_cleaning = clean_cfg is not None and any(vars(clean_cfg).values())
     needs_split = (
-        (cfg.blank_line_mode == "切分" or cfg.divider_mode == "切分")
+        (seg_cfg.blank_line_mode == "切分" or seg_cfg.divider_mode == "切分")
         and len(segments) > 1
     )
     if not has_elements and not needs_cleaning and not needs_split:
         return None
 
-    groups = group_segments(segments, cfg)
+    groups = group_segments(segments, seg_cfg)
     non_plain = [c for c in chain if not _is_plain(c)]
 
     built_groups = list(await asyncio.gather(
-        *(build_chain(g, cfg, clean_cfg, data_dir, renderers) for g in groups)
+        *(build_chain(g, cfg, seg_cfg, clean_cfg, data_dir, renderers) for g in groups)
     ))
 
     return assemble_messages(built_groups, non_plain)

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from astrbot.api.message_components import Plain, Image
 
 from render.parser import CodeBlock
-from render.utils import CleanConfig, RenderConfig
+from render.utils import CleanConfig, RenderConfig, SegmentConfig
 
 
 def _make_cfg(**overrides):
@@ -14,12 +14,23 @@ def _make_cfg(**overrides):
         "code_mode": "不处理",
         "table_mode": "不处理",
         "expr_mode": "不处理",
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
         "temp_ttl": 0,
-        "send_delay": False,
     }
     return RenderConfig(**(defaults | overrides))
+
+
+def _make_seg_cfg(**overrides):
+    """构造测试用 SegmentConfig。"""
+    defaults = {
+        "divider_mode": "不处理",
+        "blank_line_mode": "不处理",
+        "send_delay": False,
+    }
+    return SegmentConfig(**(defaults | overrides))
+
+
+# 默认分段配置：不切分、无延时。需定制的用例在方法内局部覆盖。
+seg_cfg = _make_seg_cfg()
 
 
 def _make_clean_cfg(**overrides):
@@ -37,14 +48,14 @@ class TestProcessChain:
         """空链返回 None。"""
         from render.chain import process_chain
 
-        result = asyncio.run(process_chain([], _make_cfg(), None, "/tmp"))
+        result = asyncio.run(process_chain([], _make_cfg(), seg_cfg, None, "/tmp"))
         assert result is None
 
     def test_blank_text_returns_none(self):
         """纯空白文本返回 None。"""
         from render.chain import process_chain
 
-        result = asyncio.run(process_chain([Plain("   ")], _make_cfg(), None, "/tmp"))
+        result = asyncio.run(process_chain([Plain("   ")], _make_cfg(), seg_cfg, None, "/tmp"))
         assert result is None
 
     def test_noop_returns_none(self):
@@ -52,7 +63,7 @@ class TestProcessChain:
         from render.chain import process_chain
 
         result = asyncio.run(
-            process_chain([Plain("普通文本")], _make_cfg(), None, "/tmp")
+            process_chain([Plain("普通文本")], _make_cfg(), seg_cfg, None, "/tmp")
         )
         assert result is None
 
@@ -61,7 +72,7 @@ class TestProcessChain:
         from render.chain import process_chain
 
         result = asyncio.run(
-            process_chain([Plain("**加粗**")], _make_cfg(), _make_clean_cfg(), "/tmp")
+            process_chain([Plain("**加粗**")], _make_cfg(), seg_cfg, _make_clean_cfg(), "/tmp")
         )
         assert result is not None
         assert [c.text for c in result[0]] == ["加粗"]
@@ -73,7 +84,7 @@ class TestProcessChain:
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(
-            process_chain([Plain("```py\nx=1\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake})
+            process_chain([Plain("```py\nx=1\n```")], cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake})
         )
         assert result is not None
         assert len(result) == 2
@@ -84,9 +95,10 @@ class TestProcessChain:
         """分隔线=切分：每组一条消息。"""
         from render.chain import process_chain
 
-        cfg = _make_cfg(divider_mode="切分")
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
         result = asyncio.run(
-            process_chain([Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")], cfg, None, "/tmp")
+            process_chain([Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")], cfg, seg_cfg, None, "/tmp")
         )
         assert result is not None
         assert len(result) == 3
@@ -98,9 +110,10 @@ class TestProcessChain:
         """连续换行=切分：空行分隔的段落各一条。"""
         from render.chain import process_chain
 
-        cfg = _make_cfg(blank_line_mode="切分")
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(blank_line_mode="切分")
         result = asyncio.run(
-            process_chain([Plain("第一段\n\n第二段\n\n第三段")], cfg, None, "/tmp")
+            process_chain([Plain("第一段\n\n第二段\n\n第三段")], cfg, seg_cfg, None, "/tmp")
         )
         assert result is not None
         assert len(result) == 3
@@ -115,7 +128,7 @@ class TestProcessChain:
         fake = MagicMock(side_effect=lambda seg, data_dir: b"png_" + seg.code.encode())
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(
-            process_chain([Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")], cfg, None, "/tmp", renderers={CodeBlock: fake})
+            process_chain([Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")], cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake})
         )
         assert result is not None
         assert len(result) == 5
@@ -129,10 +142,11 @@ class TestProcessChain:
         """原链非 Plain 组件前置到首条消息。"""
         from render.chain import process_chain
 
-        cfg = _make_cfg(divider_mode="切分")
+        cfg = _make_cfg()
+        seg_cfg = _make_seg_cfg(divider_mode="切分")
         img = Image.fromFileSystem("/tmp/a.png")
         result = asyncio.run(
-            process_chain([img, Plain("第一段\n\n---\n\n第二段")], cfg, None, "/tmp")
+            process_chain([img, Plain("第一段\n\n---\n\n第二段")], cfg, seg_cfg, None, "/tmp")
         )
         assert result is not None
         assert len(result) == 2

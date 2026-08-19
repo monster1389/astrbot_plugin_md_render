@@ -71,7 +71,7 @@ def _download_sarasa_font(fonts_dir: str) -> bool:
     "astrbot_plugin_md_render",
     "monster1389",
     "Markdown 渲染插件",
-    "1.2.3",
+    "1.3.0",
 )
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、表格、数学表达式渲染为图片。
@@ -84,6 +84,7 @@ class MdRenderPlugin(Star):
         super().__init__(context)
         self.config: dict[str, Any] = config or {}
         self.cfg = None
+        self.seg_cfg = None
         self.clean_cfg = None
 
     async def initialize(self):
@@ -96,7 +97,7 @@ class MdRenderPlugin(Star):
         font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
         if not os.path.exists(font_path):
             asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
-        self.cfg, self.clean_cfg = load_config(self.config)
+        self.cfg, self.seg_cfg, self.clean_cfg = load_config(self.config)
         _start_cleaner(str(data_dir), self.cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
 
@@ -110,7 +111,9 @@ class MdRenderPlugin(Star):
         result = event.get_result()
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
 
-        messages = await process_chain(result.chain, self.cfg, self.clean_cfg, data_dir)
+        messages = await process_chain(
+            result.chain, self.cfg, self.seg_cfg, self.clean_cfg, data_dir
+        )
         if messages is None:
             return
 
@@ -121,7 +124,7 @@ class MdRenderPlugin(Star):
             mc.chain = comps
             await self.context.send_message(event.unified_msg_origin, mc)
 
-        result.chain = await deliver(_send, messages, self.cfg)
+        result.chain = await deliver(_send, messages, self.seg_cfg)
 
     def _log_render_summary(self, chains: list[list]) -> None:
         """汇总渲染产物数量日志，0 则静默。

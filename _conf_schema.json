@@ -25,31 +25,38 @@
         "options": ["不处理", "渲染图像", "渲染且保留原文"],
         "default": "渲染图像"
       },
+      "临时文件存活": {
+        "type": "int",
+        "description": "临时文件存活",
+        "hint": "渲染产物保留时长（分钟）。0=即时删除，-1=永久保留。",
+        "default": 3
+      }
+    }
+  },
+  "分段": {
+    "type": "object",
+    "description": "分段",
+    "hint": "在分隔线或空行处将消息拆成多条独立 QQ 消息。",
+    "items": {
       "分隔线": {
         "type": "string",
         "description": "分隔线",
         "hint": "对 --- 分隔线的处理方式。'切分' 在分隔线处拆成多条 QQ 消息。",
         "options": ["不处理", "切分"],
-        "default": "不处理"
+        "default": "切分"
       },
       "连续换行": {
         "type": "string",
         "description": "连续换行",
         "hint": "对空行（连续换行）的处理方式。'切分' 在空行处拆成多条 QQ 消息。",
         "options": ["不处理", "切分"],
-        "default": "不处理"
+        "default": "切分"
       },
       "发送延时": {
         "type": "bool",
         "description": "发送延时",
         "hint": "多条消息之间随机延时防风控：图片/文件间 1~3 秒，纯文本间 0.3~1 秒。",
         "default": true
-      },
-      "临时文件存活": {
-        "type": "int",
-        "description": "临时文件存活",
-        "hint": "渲染产物保留时长（分钟）。0=即时删除，-1=永久保留。",
-        "default": 3
       }
     }
   },
@@ -68,6 +75,8 @@
       "列表标记（有序）": { "type": "bool", "description": "有序列表", "hint": "去除 1. 有序列表前缀标记。", "default": true },
       "引用": { "type": "bool", "description": "引用", "hint": "去除 > 引用前缀标记。", "default": true },
       "图片": { "type": "bool", "description": "图片", "hint": "将 ![alt](url) 转为 'alt (url)' 格式。", "default": true },
+      "分隔线": { "type": "bool", "description": "分隔线", "hint": "去除独立 --- 分隔线标记，保留段落分隔。", "default": true },
+      "连续换行": { "type": "bool", "description": "连续换行", "hint": "将连续空行压为单个换行。", "default": true },
       "代码块": { "type": "bool", "description": "代码块", "hint": "去除 ``` 围栏标记，保留代码文本。", "default": false },
       "表格": { "type": "bool", "description": "表格", "hint": "去除表头分隔行，竖线保留为列分隔符。", "default": false },
       "表达式": { "type": "bool", "description": "表达式", "hint": "去除 $ 和 $$ 定界符，保留公式文本。", "default": false }

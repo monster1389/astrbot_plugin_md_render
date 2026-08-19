@@ -1,6 +1,6 @@
 """配置读取、颜色解析、字体发现、临时路径构建。
 
-导出: RenderConfig, CleanConfig, load_config, get_font,
+导出: RenderConfig, SegmentConfig, CleanConfig, load_config, get_font,
       find_font_path, build_temp_path
 """
 from __future__ import annotations
@@ -54,17 +54,25 @@ class RenderConfig:
         code_mode: 代码块处理模式。
         table_mode: 表格处理模式。
         expr_mode: 数学表达式处理模式。
-        divider_mode: 水平分割线处理模式。
-        blank_line_mode: 连续换行（空行）处理模式。
         temp_ttl: 临时文件存活分钟数。
-        send_delay: 切分后多条消息间是否随机延时（1~3 秒）防风控。
     """
     code_mode: str
     table_mode: str
     expr_mode: str
+    temp_ttl: int
+
+
+@dataclass(frozen=True)
+class SegmentConfig:
+    """分段配置。
+
+    Attributes:
+        divider_mode: 水平分割线处理模式（不处理/切分）。
+        blank_line_mode: 连续换行（空行）处理模式（不处理/切分）。
+        send_delay: 切分后多条消息间是否随机延时（1~3 秒）防风控。
+    """
     divider_mode: str
     blank_line_mode: str
-    temp_ttl: int
     send_delay: bool = True
 
 
@@ -83,6 +91,8 @@ class CleanConfig:
         list_ordered: 去除 1. 有序列表标记。
         blockquote: 去除 > 引用标记。
         image: 去除 ![alt](url) 转为 alt (url)。
+        divider: 去除独立 --- 分隔线标记，保留段落分隔。
+        blank_line: 将连续空行压为单个换行。
         code: 去除 ``` 围栏标记，保留代码文本。
         table: 去除表头分隔行及首尾 |，保留列分隔符。
         expr: 去除 $ 和 $$ 定界符，保留公式文本。
@@ -97,38 +107,39 @@ class CleanConfig:
     list_ordered: bool = True
     blockquote: bool = True
     image: bool = True
+    divider: bool = True
+    blank_line: bool = True
     code: bool = False
     table: bool = False
     expr: bool = False
 
 
-def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
-    """从 AstrBot 原始配置字典构造 RenderConfig 和 CleanConfig。
+def load_config(raw: dict) -> tuple[RenderConfig, SegmentConfig, CleanConfig]:
+    """从 AstrBot 原始配置字典构造 RenderConfig、SegmentConfig 和 CleanConfig。
 
-    适配嵌套配置结构：raw["渲染"] 包含渲染配置，raw["清洗"] 包含清洗配置。
-    也向后兼容旧版平铺结构：直接取 raw 的顶层键。
+    适配三块嵌套配置结构：raw["渲染"]、raw["分段"]、raw["清洗"]。
 
     Args:
         raw: AstrBot 配置字典。
 
     Returns:
-        (RenderConfig, CleanConfig) 元组。
+        (RenderConfig, SegmentConfig, CleanConfig) 元组。
     """
     render_raw = raw.get("渲染", {})
-    if not render_raw:
-        # 向后兼容旧版平铺配置
-        render_raw = raw
-
+    segment_raw = raw.get("分段", {})
     clean_raw = raw.get("清洗", {})
 
     render_cfg = RenderConfig(
         code_mode=render_raw.get("代码块", "渲染且md文件"),
         table_mode=render_raw.get("表格", "渲染图像"),
         expr_mode=render_raw.get("表达式", "渲染图像"),
-        divider_mode=render_raw.get("分隔线", "不处理"),
-        blank_line_mode=render_raw.get("连续换行", "不处理"),
         temp_ttl=int(render_raw.get("临时文件存活", 3)),
-        send_delay=bool(render_raw.get("发送延时", True)),
+    )
+
+    segment_cfg = SegmentConfig(
+        divider_mode=segment_raw.get("分隔线", "切分"),
+        blank_line_mode=segment_raw.get("连续换行", "切分"),
+        send_delay=bool(segment_raw.get("发送延时", True)),
     )
 
     clean_cfg = CleanConfig(
@@ -142,12 +153,14 @@ def load_config(raw: dict) -> tuple[RenderConfig, CleanConfig]:
         list_ordered=bool(clean_raw.get("列表标记（有序）", True)),
         blockquote=bool(clean_raw.get("引用", True)),
         image=bool(clean_raw.get("图片", True)),
+        divider=bool(clean_raw.get("分隔线", True)),
+        blank_line=bool(clean_raw.get("连续换行", True)),
         code=bool(clean_raw.get("代码块", False)),
         table=bool(clean_raw.get("表格", False)),
         expr=bool(clean_raw.get("表达式", False)),
     )
 
-    return render_cfg, clean_cfg
+    return render_cfg, segment_cfg, clean_cfg
 
 
 def find_font_path(data_dir: str | None = None) -> str | None:

@@ -4,20 +4,16 @@ from unittest.mock import AsyncMock, patch
 
 from astrbot.api.message_components import Plain, Image, File
 
-from render.utils import RenderConfig
+from render.utils import SegmentConfig
 
 
 def _make_cfg(**overrides):
-    """构造测试用 RenderConfig，支持按需覆盖。"""
+    """构造测试用 SegmentConfig，支持按需覆盖。"""
     defaults = {
-        "code_mode": "不处理",
-        "table_mode": "不处理",
-        "expr_mode": "不处理",
         "divider_mode": "不处理",
         "blank_line_mode": "不处理",
-        "temp_ttl": 5,
     }
-    return RenderConfig(**(defaults | overrides))
+    return SegmentConfig(**(defaults | overrides))
 
 
 class TestDeliver:
