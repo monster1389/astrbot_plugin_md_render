@@ -286,33 +286,63 @@ def _is_plain(comp: Any) -> bool:
     )
 
 
+# 块级元素：代码块、表格、块级表达式。自身独立成组，前后的纯文本与行内
+# 表达式各并成一组（keep_whole）。
+_BLOCK_TYPES: tuple[type, ...] = (CodeBlock, Table, BlockExpr)
+
+
+@dataclass(frozen=True)
+class SegmentGroup:
+    """一次分组的片段列表与其发送方式。
+
+    Attributes:
+        segments: 该组的 segment 列表。
+        keep_whole: True 表示整组合并成一条消息（纯文本段 + 行内表达式）；
+            False 表示含块级元素，逐组件拆条保持阅读顺序。
+    """
+    segments: list[Any]
+    keep_whole: bool
+
+
 def group_segments(
     segments: list[Any],
     seg_cfg: SegmentConfig,
-) -> list[list[Any]]:
+) -> list[SegmentGroup]:
     """按切分配置将 segments 分组为多条独立消息。
 
-    切分点有两类：
+    切分点有三类：
       - 分隔线（分隔线=切分）：`---` 作为断点，本身不进入消息。
       - 空行（连续换行=切分）：相邻纯文本段之间断开。
+      - 块级元素（代码块/表格/块级表达式）：自身独立一组，前后的纯文本
+        与行内表达式各并成一组。
+
+    keep_whole=True 的组（纯文本段 + 行内表达式）整组合并成一条消息，
+    行内表达式图片与相邻文字同条展示；keep_whole=False 的块级组逐组件
+    拆条，保持阅读顺序。
 
     Args:
         segments: parser.parse() 输出的片段列表。
         seg_cfg: 分段配置。
 
     Returns:
-        消息分组列表，每组为一段待独立发送的片段列表。
+        消息分组列表，每组带 keep_whole 标记。
     """
-    groups: list[list[Any]] = []
+    groups: list[SegmentGroup] = []
     current: list[Any] = []
     for seg in segments:
         if isinstance(seg, Divider):
             if seg_cfg.divider_mode == "切分":
                 if current:
-                    groups.append(current)
+                    groups.append(SegmentGroup(current, keep_whole=True))
                     current = []
                 continue
             current.append(seg)
+            continue
+        if isinstance(seg, _BLOCK_TYPES):
+            if current:
+                groups.append(SegmentGroup(current, keep_whole=True))
+                current = []
+            groups.append(SegmentGroup([seg], keep_whole=False))
             continue
         if (
             seg_cfg.blank_line_mode == "切分"
@@ -320,11 +350,11 @@ def group_segments(
             and isinstance(current[-1], Segment)
             and isinstance(seg, Segment)
         ):
-            groups.append(current)
+            groups.append(SegmentGroup(current, keep_whole=True))
             current = []
         current.append(seg)
     if current:
-        groups.append(current)
+        groups.append(SegmentGroup(current, keep_whole=True))
     return groups
 
 
@@ -359,20 +389,28 @@ def split_messages(chain: list[Any]) -> list[list[Any]]:
 
 def assemble_messages(
     built_groups: list[list[Any]],
+    keep_whole: list[bool],
     non_plain: list[Any],
 ) -> list[list[Any]]:
-    """将各组的构建链拆条后拼接为待发送消息列表。
+    """将各组的构建链拼装为待发送消息列表。
 
-    含媒体的组逐组件拆成独立消息；原链的非 Plain 组件前置到首条消息。
+    keep_whole=True 的组整组合并成一条（行内表达式图片与相邻文字同条）；
+    keep_whole=False 的组逐组件拆成独立消息。原链的非 Plain 组件前置到首条。
 
     Args:
-        built_groups: build_chain 对各组的结果列表。
+        built_groups: build_chain 对各组的结果列表，与 keep_whole 一一对应。
+        keep_whole: 各组的整组合并标记。
         non_plain: 原始链中的非 Plain 组件，为空则不做前置。
 
     Returns:
         待发送消息列表，末条留作 result.chain。
     """
-    messages = [m for built in built_groups for m in split_messages(built)]
+    messages: list[list[Any]] = []
+    for built, keep in zip(built_groups, keep_whole):
+        if keep:
+            messages.append(built)
+        else:
+            messages.extend(split_messages(built))
     if non_plain:
         messages[0] = non_plain + messages[0]
     return messages
@@ -427,7 +465,7 @@ async def process_chain(
     non_plain = [c for c in chain if not _is_plain(c)]
 
     built_groups = list(await asyncio.gather(
-        *(build_chain(g, cfg, clean_cfg, data_dir, renderers) for g in groups)
+        *(build_chain(g.segments, cfg, clean_cfg, data_dir, renderers) for g in groups)
     ))
 
-    return assemble_messages(built_groups, non_plain)
+    return assemble_messages(built_groups, [g.keep_whole for g in groups], non_plain)

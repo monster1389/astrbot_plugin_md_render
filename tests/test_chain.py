@@ -515,7 +515,8 @@ class TestGroupSegments:
         segments = [Segment(text="只有一段")]
         groups = group_segments(segments, seg_cfg)
         assert len(groups) == 1
-        assert groups[0] == segments
+        assert groups[0].segments == segments
+        assert groups[0].keep_whole is True
 
     def test_divider_split_when_divider_mode_split(self):
         """分隔线=切分：`---` 处断开，Divider 不进入任何分组。"""
@@ -525,8 +526,8 @@ class TestGroupSegments:
         seg_cfg = _make_seg_cfg(divider_mode="切分")
         groups = group_segments(segments, seg_cfg)
         assert len(groups) == 2
-        assert groups[0] == [Segment(text="上")]
-        assert groups[1] == [Segment(text="下")]
+        assert groups[0].segments == [Segment(text="上")]
+        assert groups[1].segments == [Segment(text="下")]
 
     def test_divider_not_split_when_divider_mode_off(self):
         """分隔线=不处理：Divider 保留在同一分组内。"""
@@ -536,7 +537,7 @@ class TestGroupSegments:
         seg_cfg = _make_seg_cfg(divider_mode="不处理")
         groups = group_segments(segments, seg_cfg)
         assert len(groups) == 1
-        assert isinstance(groups[0][1], Divider)
+        assert isinstance(groups[0].segments[1], Divider)
 
     def test_blank_line_split_when_blank_line_mode_split(self):
         """连续换行=切分：相邻纯文本段之间断开。"""
@@ -546,10 +547,10 @@ class TestGroupSegments:
         seg_cfg = _make_seg_cfg(blank_line_mode="切分")
         groups = group_segments(segments, seg_cfg)
         assert len(groups) == 3
-        assert [g[0].text for g in groups] == ["第一段", "第二段", "第三段"]
+        assert [g.segments[0].text for g in groups] == ["第一段", "第二段", "第三段"]
 
-    def test_blank_line_not_split_around_non_segment(self):
-        """连续换行=切分：非纯文本段不触发空行断点。"""
+    def test_block_element_own_group(self):
+        """块级元素独立成组，前后纯文本各自成组。"""
         from render.chain import group_segments
 
         segments = [
@@ -559,8 +560,26 @@ class TestGroupSegments:
         ]
         seg_cfg = _make_seg_cfg(blank_line_mode="切分")
         groups = group_segments(segments, seg_cfg)
-        assert len(groups) == 1
-        assert len(groups[0]) == 3
+        assert len(groups) == 3
+        assert [g.keep_whole for g in groups] == [True, False, True]
+        assert isinstance(groups[1].segments[0], CodeBlock)
+
+    def test_block_types_each_own_group(self):
+        """代码块/表格/块级表达式各自独立成组，行内表达式并入文本流。"""
+        from render.chain import group_segments
+
+        tbl = Table(headers=[RichCell(spans=[Span(text="A")])], rows=[[RichCell(spans=[Span(text="1")])]])
+        segments = [
+            Segment(text="文本"),
+            CodeBlock(lang="py", code="x=1"),
+            InlineExpr(expr="a"),
+            tbl,
+            BlockExpr(expr="b"),
+            Segment(text="尾"),
+        ]
+        groups = group_segments(segments, seg_cfg)
+        assert [g.keep_whole for g in groups] == [True, False, True, False, False, True]
+        assert [len(g.segments) for g in groups] == [1, 1, 1, 1, 1, 1]
 
 
 class TestHasMedia:
@@ -619,24 +638,32 @@ class TestSplitMessages:
 
 class TestAssembleMessages:
     def test_plain_groups_kept_whole(self):
-        """纯文本组保持单条不拆。"""
+        """keep_whole 组保持单条不拆。"""
         from render.chain import assemble_messages
 
         groups = [[Plain("A"), Plain("B")]]
-        result = assemble_messages(groups, [])
+        result = assemble_messages(groups, [True], [])
         assert len(result) == 1
         assert [c.text for c in result[0]] == ["A", "B"]
 
-    def test_media_groups_split_per_component(self):
-        """含媒体组按组件拆成独立消息。"""
+    def test_inline_group_with_expr_image_kept_whole(self):
+        """keep_whole 组含行内表达式图片时整组一条，图片留在文字原位。"""
         from render.chain import assemble_messages
 
-        groups = [[Plain("A"), Image.fromBytes(b"x"), Plain("B")]]
-        result = assemble_messages(groups, [])
-        assert len(result) == 3
-        assert isinstance(result[0][0], Plain) and result[0][0].text == "A"
+        groups = [[Plain("增长率为"), Image.fromBytes(b"x"), Plain("，其余不变")]]
+        result = assemble_messages(groups, [True], [])
+        assert len(result) == 1
+        assert [type(c) for c in result[0]] == [Plain, Image, Plain]
+
+    def test_block_group_split_per_component(self):
+        """keep_whole=False 的块级组逐组件拆条（原文/图各自一条）。"""
+        from render.chain import assemble_messages
+
+        groups = [[Plain("x=1"), Image.fromBytes(b"code")]]
+        result = assemble_messages(groups, [False], [])
+        assert len(result) == 2
+        assert isinstance(result[0][0], Plain) and result[0][0].text == "x=1"
         assert isinstance(result[1][0], Image)
-        assert isinstance(result[2][0], Plain) and result[2][0].text == "B"
 
     def test_non_plain_prepended_to_first(self):
         """非 Plain 组件前置到首条消息。"""
@@ -644,7 +671,7 @@ class TestAssembleMessages:
 
         non_plain = [Image.fromFileSystem("/tmp/a.png")]
         groups = [[Plain("文本")]]
-        result = assemble_messages(groups, non_plain)
+        result = assemble_messages(groups, [True], non_plain)
         assert len(result) == 1
         assert isinstance(result[0][0], Image)
         assert result[0][1].text == "文本"
@@ -654,7 +681,7 @@ class TestAssembleMessages:
         from render.chain import assemble_messages
 
         groups = [[Plain("1")], [Plain("2"), Plain("3")]]
-        result = assemble_messages(groups, [])
+        result = assemble_messages(groups, [True, True], [])
         assert len(result) == 2
         assert [c.text for c in result[0]] == ["1"]
         assert [c.text for c in result[1]] == ["2", "3"]
@@ -703,3 +730,68 @@ class TestRenderInjection:
         assert _renderer_for(CodeBlock, code_spec, {CodeBlock: fake}) is fake
         assert _renderer_for(Table, table_spec, {CodeBlock: fake}) is table_spec.render
         assert _renderer_for(CodeBlock, code_spec, None) is code_spec.render
+
+
+class TestInlineRunMerging:
+    """行内表达式与相邻文本合并成一条消息，块级元素打断内联流。"""
+
+    def test_inline_expr_keeps_own_message(self):
+        """「文本 $expr$ 文本」整条合并，行内表达式图片留在文字原位。"""
+        from render.chain import process_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        cfg = _make_cfg(expr_mode="渲染图像")
+        result = asyncio.run(process_chain(
+            [Plain("增长率为 $5\\%$，其余不变")], cfg, seg_cfg, None, "/tmp",
+            renderers={InlineExpr: fake},
+        ))
+        assert len(result) == 1
+        assert [type(c) for c in result[0]] == [Plain, Image, Plain]
+        assert result[0][0].text.strip() == "增长率为"
+        assert result[0][2].text.strip() == "，其余不变"
+
+    def test_trailing_text_merged(self):
+        """表达式后不换行的文字并入同一条。"""
+        from render.chain import process_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        cfg = _make_cfg(expr_mode="渲染图像")
+        result = asyncio.run(process_chain(
+            [Plain("毛利 $a$，增长 $b$，很好")], cfg, seg_cfg, None, "/tmp",
+            renderers={InlineExpr: fake},
+        ))
+        assert len(result) == 1
+        assert len(result[0]) == 5
+        assert isinstance(result[0][1], Image)
+        assert isinstance(result[0][3], Image)
+
+    def test_block_expr_stays_own_message(self):
+        """块级表达式不合并，独立一条，前后内联流各自合并。"""
+        from render.chain import process_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        cfg = _make_cfg(expr_mode="渲染图像")
+        result = asyncio.run(process_chain(
+            [Plain("公式 $x$ 且 $$y$$ 且 $z$")], cfg, seg_cfg, None, "/tmp",
+            renderers={InlineExpr: fake, BlockExpr: fake},
+        ))
+        assert len(result) == 3
+        assert [type(c) for c in result[0]] == [Plain, Image, Plain]
+        assert isinstance(result[1][0], Image)  # 块级表达式独立一条
+        assert [type(c) for c in result[2]] == [Plain, Image]
+
+    def test_code_block_splits_inline_run(self):
+        """代码块打断内联流：代码块独立一条，前后内联流各自合并。"""
+        from render.chain import process_chain
+
+        fake = MagicMock(return_value=b"fake_png")
+        cfg = _make_cfg(code_mode="渲染图像", expr_mode="渲染图像")
+        md = "注意：$a$ 代码是\n```py\nprint(1)\n```\n末尾 $b$ 了"
+        result = asyncio.run(process_chain(
+            [Plain(md)], cfg, seg_cfg, None, "/tmp",
+            renderers={CodeBlock: fake, InlineExpr: fake},
+        ))
+        assert len(result) == 3
+        assert [type(c) for c in result[0]] == [Plain, Image, Plain]  # 注意：🖼️(a) 代码是
+        assert isinstance(result[1][0], Image)  # 代码块图独立一条
+        assert [type(c) for c in result[2]] == [Plain, Image, Plain]  # 末尾 🖼️(b) 了
