@@ -58,7 +58,6 @@ def clean_markdown(text: str, cfg: CleanConfig) -> str:
 def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str:
     """递归遍历 token 列表，拼接清洗后文本。"""
     parts: list[str] = []
-    link_href: str = ""
     list_counter: int = 0
     # 段落分隔符：连续换行清洗开时压为单个换行
     sep = "\n" if cfg.blank_line else "\n\n"
@@ -157,12 +156,6 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
                 alt = t.content or ""
                 src = t.attrs.get("src", "") if t.attrs else ""
                 parts.append(f"![{alt}]({src})")
-        elif t.type == "link_open":
-            link_href = t.attrs.get("href", "") if t.attrs else ""
-        elif t.type == "link_close":
-            if cfg.link and link_href:
-                parts.append(f" ({link_href})")
-            link_href = ""
 
         elif t.type == "html_block":
             parts.append(t.content)
