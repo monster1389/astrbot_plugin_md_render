@@ -1,5 +1,16 @@
 """解析器测试：从 Plain 文本提取代码块/表格/表达式/分隔线。"""
-from render.parser import parse, Segment, CodeBlock, InlineExpr, BlockExpr, Divider
+from render.parser import (
+    BlockExpr,
+    CodeBlock,
+    Divider,
+    InlineExpr,
+    Segment,
+    codeblock_to_markdown,
+    codeblock_to_plain,
+    expr_to_markdown,
+    expr_to_plain,
+    parse,
+)
 from render.table_domain import Table
 
 
@@ -257,3 +268,32 @@ class TestBlockMathInFence:
         assert block_exprs[0].expr == "E=mc^2"
         code = next(s for s in segments if isinstance(s, CodeBlock))
         assert code.code == "$$literal$$"
+
+
+class TestSerialization:
+    """元素 → 原文序列化：与类型同居的还原函数。"""
+
+    def test_codeblock_markdown(self):
+        """代码块还原为围栏原文。"""
+        assert codeblock_to_markdown(CodeBlock(lang="py", code="x=1")) == "```py\nx=1\n```"
+
+    def test_codeblock_markdown_no_lang(self):
+        """无语言标注的代码块围栏不带 info。"""
+        assert codeblock_to_markdown(CodeBlock(lang="", code="x=1")) == "```\nx=1\n```"
+
+    def test_codeblock_plain(self):
+        """代码块还原为纯代码。"""
+        assert codeblock_to_plain(CodeBlock(lang="py", code="x=1")) == "x=1"
+
+    def test_inline_expr_markdown(self):
+        """行内表达式还原为 $ 包裹原文。"""
+        assert expr_to_markdown(InlineExpr(expr="E=mc^2")) == "$E=mc^2$"
+
+    def test_block_expr_markdown(self):
+        """块级表达式还原为 $$ 包裹原文。"""
+        assert expr_to_markdown(BlockExpr(expr="E=mc^2")) == "$$\nE=mc^2\n$$"
+
+    def test_expr_plain(self):
+        """表达式还原为纯公式，行内/块级无差。"""
+        assert expr_to_plain(InlineExpr(expr="x")) == "x"
+        assert expr_to_plain(BlockExpr(expr="x")) == "x"

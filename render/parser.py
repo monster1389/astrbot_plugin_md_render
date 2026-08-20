@@ -50,6 +50,30 @@ class CodeBlock:
     code: str
 
 
+def codeblock_to_markdown(cb: CodeBlock) -> str:
+    """将代码块还原为 markdown 围栏原文。
+
+    Args:
+        cb: 代码块。
+
+    Returns:
+        带围栏标记的 markdown 文本。
+    """
+    return f"```{cb.lang}\n{cb.code}\n```"
+
+
+def codeblock_to_plain(cb: CodeBlock) -> str:
+    """将代码块还原为精简纯文本：仅代码。
+
+    Args:
+        cb: 代码块。
+
+    Returns:
+        不带围栏的纯代码文本。
+    """
+    return cb.code
+
+
 @dataclass
 class InlineExpr:
     """行内数学表达式 $...$。"""
@@ -60,6 +84,32 @@ class InlineExpr:
 class BlockExpr:
     """块级数学表达式 $$...$$。"""
     expr: str
+
+
+def expr_to_markdown(e: InlineExpr | BlockExpr) -> str:
+    """将表达式还原为 markdown 原文：行内 $..$ / 块级 $$..$$。
+
+    Args:
+        e: 行内或块级表达式。
+
+    Returns:
+        带 $ 分隔符的 markdown 文本。
+    """
+    if isinstance(e, BlockExpr):
+        return f"$$\n{e.expr}\n$$"
+    return f"${e.expr}$"
+
+
+def expr_to_plain(e: InlineExpr | BlockExpr) -> str:
+    """将表达式还原为精简纯文本：仅公式。
+
+    Args:
+        e: 行内或块级表达式。
+
+    Returns:
+        不带 $ 分隔符的公式文本。
+    """
+    return e.expr
 
 
 @dataclass

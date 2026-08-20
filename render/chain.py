@@ -16,7 +16,18 @@ from render.code_render import render_code
 from render.config import RenderConfig, SegmentConfig, CleanConfig
 from render.expr_render import render_expr
 from render.md_cleaner import clean_markdown
-from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment, parse
+from render.parser import (
+    BlockExpr,
+    CodeBlock,
+    Divider,
+    InlineExpr,
+    Segment,
+    codeblock_to_markdown,
+    codeblock_to_plain,
+    expr_to_markdown,
+    expr_to_plain,
+    parse,
+)
 from render.table_domain import Table, table_to_markdown, table_to_plain
 from render.table_render import render_table
 from render.tempstore import build_temp_path
@@ -72,7 +83,7 @@ class ElementSpec:
 
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
     CodeBlock: ElementSpec(
-        text=lambda seg, cc: seg.code if (cc and cc.code) else f"```{seg.lang}\n{seg.code}\n```",
+        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
         render=render_code,
         prefix="code",
         supports_file=True,
@@ -86,13 +97,13 @@ _ELEMENT_SPECS: dict[type, ElementSpec] = {
         mode_key="table_mode",
     ),
     InlineExpr: ElementSpec(
-        text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"${seg.expr}$",
+        text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
         render=render_expr,
         prefix="expr",
         mode_key="expr_mode",
     ),
     BlockExpr: ElementSpec(
-        text=lambda seg, cc: seg.expr if (cc and cc.expr) else f"$$\n{seg.expr}\n$$",
+        text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
         render=render_expr,
         prefix="expr",
         mode_key="expr_mode",
