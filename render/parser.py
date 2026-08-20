@@ -31,6 +31,9 @@ _INLINE_EXPR_RE = re.compile(
 # 用于拆分行内表达式占位符
 _INLINE_PLACEHOLDER_RE = re.compile(r"\x02INLINEEXPR(\d+)\x02")
 
+# 匹配围栏开行：行首（允许空白缩进）出现 3+ 个 ` 或 ~
+_FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+
 
 @dataclass
 class Segment:
@@ -195,11 +198,12 @@ def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
     return spans
 
 
-def _cell_spans(tokens: list[Token]) -> list[Span]:
+def _cell_spans(tokens: list[Token], block_math: dict[int, str]) -> list[Span]:
     """从单元格 token 序列提取 Span 列表。
 
     Args:
         tokens: 单元格内 token 列表。
+        block_math: 块级数学表达式占位符映射，用于还原格内占位符。
 
     Returns:
         解析后的 Span 列表。
@@ -214,11 +218,35 @@ def _cell_spans(tokens: list[Token]) -> list[Span]:
             spans.append(Span(text=t.content))
         elif t.type == "softbreak":
             spans.append(Span(text=" "))
+    for span in spans:
+        span.text = _restore_block_math(span.text, block_math)
     return spans
+
+
+def _is_fence_close(line: str, fence_char: str, fence_len: int) -> bool:
+    """判断行是否为当前围栏的闭合行。
+
+    Args:
+        line: 待判断行。
+        fence_char: 开围栏字符（` 或 ~）。
+        fence_len: 开围栏字符数。
+
+    Returns:
+        True 表示是闭合行。
+    """
+    stripped = line.lstrip()
+    if not stripped.startswith(fence_char):
+        return False
+    count = len(stripped) - len(stripped.lstrip(fence_char))
+    return count >= fence_len and stripped[count:].strip() == ""
 
 
 def _pre_extract_block_math(text: str) -> tuple[str, dict[int, str]]:
     """预提取 $$...$$ 块级数学表达式，替换为占位符。
+
+    逐行扫描识别 ``` / ~~~ 围栏，围栏内的 $$...$$ 不提取，
+    保证代码块内容字节级原样保留（markdown-it 的 fence token
+    不走 extract_inline_content 还原路径）。
 
     Args:
         text: 原始 markdown 文本。
@@ -237,16 +265,60 @@ def _pre_extract_block_math(text: str) -> tuple[str, dict[int, str]]:
         idx += 1
         return placeholder
 
-    processed = _MATH_BLOCK_RE.sub(_replace, text)
-    return processed, placeholders
+    out: list[str] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        if buf:
+            out.append(_MATH_BLOCK_RE.sub(_replace, "".join(buf)))
+            buf.clear()
+
+    fence_char: str | None = None
+    fence_len = 0
+    for line in text.splitlines(keepends=True):
+        if fence_char is None:
+            m = _FENCE_OPEN_RE.match(line)
+            if m:
+                flush()
+                fence_char = m.group(1)[0]
+                fence_len = len(m.group(1))
+                out.append(line)
+            else:
+                buf.append(line)
+        else:
+            out.append(line)
+            if _is_fence_close(line, fence_char, fence_len):
+                fence_char = None
+    flush()
+    return "".join(out), placeholders
 
 
-def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
+def _restore_block_math(text: str, block_math: dict[int, str]) -> str:
+    """将文本中的块级数学占位符还原为 $expr$ 形式。
+
+    用于表格单元格等未走 extract_inline_content 的路径，
+    避免占位符作为可见文本泄漏。
+
+    Args:
+        text: 可能含占位符的文本。
+        block_math: 占位符索引到表达式内容的映射。
+
+    Returns:
+        还原后的文本，未知占位符原样保留。
+    """
+    def _replace(m: re.Match) -> str:
+        expr = block_math.get(int(m.group(1)))
+        return f"${expr}$" if expr is not None else m.group(0)
+    return _MATH_PLACEHOLDER_RE.sub(_replace, text)
+
+
+def _parse_table(tokens: list[Token], start_idx: int, block_math: dict[int, str]) -> tuple[Table, int]:
     """从 token 流中解析一个表格。
 
     Args:
         tokens: markdown-it-py token 列表。
         start_idx: table_open token 的索引。
+        block_math: 块级数学表达式占位符映射，传给 _cell_spans 还原格内占位符。
 
     Returns:
         (解析后的 Table 对象, table_close 的下一个索引)。
@@ -271,7 +343,7 @@ def _parse_table(tokens: list[Token], start_idx: int) -> tuple[Table, int]:
                     while k < len(tokens) and tokens[k].type not in ("th_close", "td_close"):
                         cell_tokens.append(tokens[k])
                         k += 1
-                    row.append(RichCell(spans=_cell_spans(cell_tokens)))
+                    row.append(RichCell(spans=_cell_spans(cell_tokens, block_math)))
                 k += 1
             if in_head and not headers:
                 headers = row
@@ -455,7 +527,7 @@ def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBloc
 
         if t.type == "table_open":
             flush_buf()
-            table, i = _parse_table(tokens, i)
+            table, i = _parse_table(tokens, i, block_math)
             segments.append(table)
             continue
 

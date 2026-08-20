@@ -1,5 +1,16 @@
 """解析器测试：从 Plain 文本提取代码块/表格/表达式/分隔线。"""
-from render.parser import parse, Segment, CodeBlock, RichCell, Span, Table, InlineExpr, BlockExpr, Divider
+from render.parser import (
+    parse,
+    table_to_markdown,
+    Segment,
+    CodeBlock,
+    RichCell,
+    Span,
+    Table,
+    InlineExpr,
+    BlockExpr,
+    Divider,
+)
 
 
 class TestCodeBlock:
@@ -234,3 +245,75 @@ class TestBlankLineSplit:
         assert not any(isinstance(s, Divider) for s in segments)
         plain = "".join(s.text for s in segments if isinstance(s, Segment))
         assert "---" in plain
+
+
+class TestBlockMathInCell:
+    """$$...$$ 位于表格单元格内时还原为文本，不泄漏占位符。"""
+
+    def test_single_line_cell_restored(self):
+        """格内单行 $$...$$ 还原为 $expr$。"""
+        text = "| a |\n| --- |\n| $$E=mc^2$$ |"
+        segments = parse(text)
+        table = segments[0]
+        assert isinstance(table, Table)
+        assert table.rows[0][0].spans == [Span(text="$E=mc^2$")]
+
+    def test_multi_line_cell_restored_literal(self):
+        """格内多行 $$...$$ 还原为字面文本。"""
+        text = "| a |\n| --- |\n| $$x^2\n\nmore$$ |"
+        segments = parse(text)
+        table = segments[0]
+        assert isinstance(table, Table)
+        assert table.rows[0][0].spans == [Span(text="$x^2\n\nmore$")]
+
+    def test_cell_math_in_markdown_roundtrip(self):
+        """格内 $$...$$ 经 table_to_markdown 还原为 $...$。"""
+        text = "| a | b |\n| --- | --- |\n| $$E=mc^2$$ | x |"
+        segments = parse(text)
+        table = segments[0]
+        assert isinstance(table, Table)
+        assert table_to_markdown(table) == "| a | b |\n|---|---|\n| $E=mc^2$ | x |"
+
+
+class TestBlockMathInFence:
+    """$$...$$ 位于代码围栏内时原样保留，不预提取。"""
+
+    def test_fence_content_preserved(self):
+        """围栏内 $$...$$ 字节级保留。"""
+        text = "```python\nx = 1\n$$E=mc^2$$\n```"
+        segments = parse(text)
+        assert len(segments) == 1
+        assert isinstance(segments[0], CodeBlock)
+        assert segments[0].code == "x = 1\n$$E=mc^2$$"
+
+    def test_fence_with_info_string(self):
+        """带 info 串的围栏内容同样保留。"""
+        text = "``` python\ny = 2\n$$z$$\n```"
+        segments = parse(text)
+        assert isinstance(segments[0], CodeBlock)
+        assert segments[0].lang == "python"
+        assert segments[0].code == "y = 2\n$$z$$"
+
+    def test_tilde_fence(self):
+        """~~~ 围栏内 $$...$$ 保留。"""
+        text = "~~~\n$$w$$\n~~~"
+        segments = parse(text)
+        assert isinstance(segments[0], CodeBlock)
+        assert segments[0].code == "$$w$$"
+
+    def test_unclosed_fence(self):
+        """未闭合围栏到 EOF，$$...$$ 仍保留。"""
+        text = "```\n$$y$$\n"
+        segments = parse(text)
+        assert isinstance(segments[0], CodeBlock)
+        assert segments[0].code == "$$y$$"
+
+    def test_math_outside_fence_still_extracted(self):
+        """围栏外的 $$...$$ 仍是 BlockExpr。"""
+        text = "$$\nE=mc^2\n$$\n\n```\n$$literal$$\n```"
+        segments = parse(text)
+        block_exprs = [s for s in segments if isinstance(s, BlockExpr)]
+        assert len(block_exprs) == 1
+        assert block_exprs[0].expr == "E=mc^2"
+        code = next(s for s in segments if isinstance(s, CodeBlock))
+        assert code.code == "$$literal$$"
