@@ -2,6 +2,18 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.3.4] - 2026-08-20
+
+### 重构
+- 表格子域提炼为 `render/table_domain.py`：Span/RichCell/Table 模型、inline 格式栈遍历、`cell_to_markdown`/`table_to_markdown`/`table_to_plain` 还原与 `parse_table` 从 parser 迁出，与类型同居。
+- 行内格式状态机提炼为 `render/inline_format.py`：表格 `_extract_spans_from_children` 与清洗 `_walk_inline` 共用同一 `FormatState`/`advance`。
+- 字体服务提炼为 `render/font.py` 深模块：`find_font_path`/`get_font` 自 `utils` 迁出，按字号缓存并回退默认字体；`utils.py` 改名 `config.py` 只留配置对象。
+- 三个渲染器改名 `code_render`/`expr_render`/`table_render`，签名统一为 `(元素) → bytes`，不再自取字体；`render/clean/` 子包拍平，`md_cleaner.py` 上移至 `render/`。
+- 元素原文序列化与类型同居：`codeblock_to_markdown`/`codeblock_to_plain`、`expr_to_markdown`/`expr_to_plain` 移入 `parser.py`，配方表 `_ELEMENT_SPECS` 换薄选择器（沿用 table_domain 模式）。
+- 删除 `md_cleaner._walk` 块级 link 跟踪死代码。
+
+> 本版本为纯内部重构，用户可见行为与 1.3.3 一致。
+
 ## [1.3.3] - 2026-08-20
 
 ### 修复

@@ -71,26 +71,29 @@ OnDecoratingResultEvent (priority=1000)  ← 本插件
 RespondStage 发送最终 chain
 ```
 
-### 配置中心
+### 配置与基础设施
 
-`render/utils.py` — `RenderConfig` dataclass + 四个工具函数：
-- `load_config(raw)` — 从 AstrBot 配置字典构造配置对象
-- `find_font_path(data_dir)` — 发现可用中文字体，优先使用捆绑的更纱等宽黑体
-- `get_font(data_dir, size)` — 按字号缓存获取 PIL 字体对象
-- `build_temp_path(data_dir, prefix, ext)` — 在 temp/ 下建带时间戳的文件路径
+配置与基础设施各自独立成模块：
+- `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造
+- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_path()` / `get_font(size)`，优先捆绑的更纱等宽黑体，按字号缓存
+- `render/tempstore.py` — 临时文件命名 `build_temp_path(data_dir, prefix, ext)` / 删除 / 刷新 + 后台按 TTL 清扫
 
 ### 模块
 
 | 模块 | 职责 |
 |------|------|
-| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider |
-| `render/code.py` | pygments → pillow 渲染代码块，返回 PNG bytes + md 文本 |
-| `render/table.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
-| `render/expr.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
-| `render/chain.py` | async 并发组装，asyncio.gather 收集渲染结果，按原序构建消息链 |
-| `render/clean/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 + 纯文本清洗函数(clean_code_block/clean_table/clean_expr) |
-| `render/clean/temp_cleaner.py` | 周期性扫描 temp/，按配置存活时长删过期临时文件 |
-| `render/utils.py` | `RenderConfig` + `CleanConfig` dataclass + 配置加载/字体发现/字体缓存/临时路径 |
+| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain） |
+| `render/table_domain.py` | Span/RichCell/Table 模型 + 表格解析/还原（`parse_table`/`table_to_markdown`/`table_to_plain`） |
+| `render/inline_format.py` | 行内格式状态机 `FormatState`/`advance`，表格与清洗共用 |
+| `render/code_render.py` | pygments → pillow 渲染代码块，返回 PNG bytes |
+| `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
+| `render/expr_render.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
+| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条/装配 + async 并发组装 + `process_chain` 管线 |
+| `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
+| `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
+| `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫 |
+| `render/font.py` | 字体发现 + 按字号缓存 |
+| `render/config.py` | `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + 配置加载 |
 
 ### 关键 API
 
