@@ -15,7 +15,8 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 
 from render.chain import has_media
-from render.utils import SegmentConfig, is_temp_file
+from render.tempstore import delete, is_temp_file, touch
+from render.utils import SegmentConfig
 
 # 发送延时范围（秒）：媒体消息 1~3s 防风控，纯文本 0.3~1s
 _DELAY_RANGES: dict[bool, tuple[float, float]] = {
@@ -57,32 +58,6 @@ def _temp_paths(comps: list) -> list[str]:
             if isinstance(p, str) and p and is_temp_file(p):
                 paths.append(p)
     return list(dict.fromkeys(paths))
-
-
-def _delete_temp_files(comps: list) -> None:
-    """删除消息中本插件生成的临时磁盘文件，已不存在则忽略。
-
-    Args:
-        comps: 消息组件列表。
-    """
-    for path in _temp_paths(comps):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-
-
-def _touch_temp_files(comps: list) -> None:
-    """刷新消息中本插件生成的临时磁盘文件的写盘时间，延长存活窗口。
-
-    Args:
-        comps: 消息组件列表。
-    """
-    for path in _temp_paths(comps):
-        try:
-            os.utime(path, None)
-        except OSError:
-            pass
 
 
 def _summarize(comps: list) -> str:
@@ -138,9 +113,9 @@ async def deliver(
             continue
         await send(message)
         logger.debug("第 %d/%d 条已发送 %s", i, n, _summarize(message))
-        _delete_temp_files(message)
+        delete(_temp_paths(message))
         if cfg.send_delay:
             await asyncio.sleep(random.uniform(*_DELAY_RANGES[has_media(message)]))
     tail = messages[-1]
-    _touch_temp_files(tail)
+    touch(_temp_paths(tail))
     return tail

@@ -1,36 +1,18 @@
-"""配置读取、颜色解析、字体发现、临时路径构建。
+"""配置读取、颜色解析、字体发现。
 
 导出: RenderConfig, SegmentConfig, CleanConfig, load_config, get_font,
-      find_font_path, build_temp_path
+      find_font_path
 """
 from __future__ import annotations
 
 import logging
 import os
-import re
 import threading
 from dataclasses import dataclass
-from datetime import datetime
 
 from PIL import ImageFont
 
 logger = logging.getLogger(__name__)
-
-# 本插件渲染产物命名模式：code/table/expr_时间戳_微秒.{png,md}
-_TEMP_FILE_RE = re.compile(r"^(code|table|expr)_\d{8}_\d{6}_\d{6}\.(png|md)$")
-
-
-def is_temp_file(name_or_path: str) -> bool:
-    """判断文件名是否为本插件生成的临时渲染文件。
-
-    Args:
-        name_or_path: 文件名或完整路径。
-
-    Returns:
-        True 表示匹配 code/table/expr_时间戳.{png,md} 命名模式。
-    """
-    return bool(_TEMP_FILE_RE.match(os.path.basename(name_or_path)))
-
 
 _font_cache: dict[int, ImageFont.FreeTypeFont] = {}
 _font_path: str | None = None
@@ -203,20 +185,3 @@ def find_font_path(data_dir: str | None = None) -> str | None:
         if os.path.exists(path):
             return path
     return None
-
-
-def build_temp_path(data_dir: str, prefix: str, ext: str) -> str:
-    """在 data_dir/temp/ 下建带时间戳的文件路径。
-
-    Args:
-        data_dir: 插件数据目录路径。
-        prefix: 文件名前缀（如 'code'、'table'、'expr'）。
-        ext: 文件扩展名（如 '.png'、'.md'）。
-
-    Returns:
-        完整文件路径。
-    """
-    temp_dir = os.path.join(data_dir, "temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    return os.path.join(temp_dir, f"{prefix}_{ts}{ext}")

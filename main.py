@@ -26,7 +26,7 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.chain import process_chain  # noqa: E402
-from render.clean.temp_cleaner import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
+from render.tempstore import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 from render.deliver import deliver  # noqa: E402
 from render.utils import load_config  # noqa: E402
 

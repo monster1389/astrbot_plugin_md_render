@@ -8,7 +8,6 @@ from render.utils import (
     RenderConfig,
     load_config,
     find_font_path,
-    build_temp_path,
 )
 
 
@@ -23,15 +22,6 @@ class TestFindFontPath:
     def test_returns_none_when_none_found(self):
         with patch("os.path.exists", return_value=False):
             assert find_font_path() is None
-
-
-class TestBuildTempPath:
-    @patch("render.utils.os.makedirs")
-    def test_creates_dir_and_returns_path(self, mock_makedirs):
-        path = build_temp_path("/data", "table", ".png")
-        assert path.startswith("/data/temp/table_")
-        assert path.endswith(".png")
-        mock_makedirs.assert_called_once()
 
 
 class TestLoadConfig:

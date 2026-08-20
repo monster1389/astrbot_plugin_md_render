@@ -27,7 +27,8 @@ from render.parser import (
 )
 from render.table import render_table
 from render.clean.md_cleaner import clean_markdown
-from render.utils import RenderConfig, SegmentConfig, CleanConfig, build_temp_path
+from render.tempstore import build_temp_path
+from render.utils import RenderConfig, SegmentConfig, CleanConfig
 
 logger = logging.getLogger(__name__)
 
