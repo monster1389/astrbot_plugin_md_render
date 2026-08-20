@@ -1,27 +1,12 @@
-"""render/utils.py 测试。"""
+"""render/config.py 测试。"""
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from unittest.mock import MagicMock, patch
 
-from render.utils import (
+from render.config import (
     RenderConfig,
     load_config,
-    find_font_path,
 )
-
-
-class TestFindFontPath:
-    def test_wqy_exists(self):
-        with patch("os.path.exists") as mock_exists:
-            mock_exists.side_effect = lambda p: "wqy-microhei.ttc" in p
-            result = find_font_path()
-            assert result is not None
-            assert "wqy-microhei.ttc" in result
-
-    def test_returns_none_when_none_found(self):
-        with patch("os.path.exists", return_value=False):
-            assert find_font_path() is None
 
 
 class TestLoadConfig:
@@ -107,34 +92,3 @@ class TestRenderConfig:
             pass
 
 
-class TestGetFont:
-    def setup_method(self):
-        import render.utils as _ru
-        _ru._font_cache.clear()
-        _ru._font_path = None
-
-    @patch("render.utils.find_font_path", return_value="/fake/font.ttf")
-    @patch("render.utils.ImageFont.truetype")
-    def test_caches_by_size(self, mock_truetype, mock_find):
-        from render.utils import get_font
-        f1 = get_font("/data", 14)
-        f2 = get_font("/data", 14)
-        assert f1 is f2
-        mock_truetype.assert_called_once()
-
-    @patch("render.utils.find_font_path", return_value="/fake/font.ttf")
-    @patch("render.utils.ImageFont.truetype")
-    def test_different_sizes_yield_different_fonts(self, mock_truetype, mock_find):
-        mock_truetype.side_effect = lambda path, size: MagicMock()
-        from render.utils import get_font
-        f14 = get_font("/data", 14)
-        f76 = get_font("/data", 76)
-        assert f14 is not f76
-        assert mock_truetype.call_count == 2
-
-    @patch("render.utils.find_font_path", return_value=None)
-    @patch("render.utils.ImageFont.load_default")
-    def test_fallback_to_default_when_no_font(self, mock_default, mock_find):
-        from render.utils import get_font
-        get_font("/data", 14)
-        mock_default.assert_called_once()

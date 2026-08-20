@@ -12,14 +12,14 @@ from typing import Any, Callable
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
-from render.code import render_code
-from render.expr import render_expr
+from render.code_render import render_code
+from render.config import RenderConfig, SegmentConfig, CleanConfig
+from render.expr_render import render_expr
+from render.md_cleaner import clean_markdown
 from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment, parse
-from render.table import render_table
 from render.table_domain import Table, table_to_markdown, table_to_plain
-from render.clean.md_cleaner import clean_markdown
+from render.table_render import render_table
 from render.tempstore import build_temp_path
-from render.utils import RenderConfig, SegmentConfig, CleanConfig
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class ElementSpec:
         mode_key: 该元素对应的 RenderConfig 模式字段名；为 None 表示固定产纯文本。
     """
     text: Callable[[Any, CleanConfig | None], str]
-    render: Callable[[Any, str], bytes] | None = None
+    render: Callable[[Any], bytes] | None = None
     prefix: str | None = None
     supports_file: bool = False
     mode_key: str | None = None
@@ -110,7 +110,7 @@ def _renderer_for(
     seg_type: type,
     spec: ElementSpec,
     renderers: dict[type, Callable] | None,
-) -> Callable[[Any, str], bytes]:
+) -> Callable[[Any], bytes]:
     """按覆盖层解析 segment 类型的渲染器，未覆盖回退 spec.render。
 
     Args:
@@ -239,7 +239,7 @@ async def build_chain(
             continue
         if _recipe_for(spec, cfg).image:
             indices.append(i)
-            coros.append(asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg, data_dir))
+            coros.append(asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg))
 
     # 并发执行
     if coros:

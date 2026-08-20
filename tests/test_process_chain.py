@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from astrbot.api.message_components import Plain, Image
 
 from render.parser import CodeBlock
-from render.utils import CleanConfig, RenderConfig, SegmentConfig
+from render.config import CleanConfig, RenderConfig, SegmentConfig
 
 
 def _make_cfg(**overrides):
@@ -125,7 +125,7 @@ class TestProcessChain:
         """交错元素按组件拆条，保持阅读顺序。"""
         from render.chain import process_chain
 
-        fake = MagicMock(side_effect=lambda seg, data_dir: b"png_" + seg.code.encode())
+        fake = MagicMock(side_effect=lambda seg: b"png_" + seg.code.encode())
         cfg = _make_cfg(code_mode="渲染且保留原文")
         result = asyncio.run(
             process_chain([Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")], cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake})

@@ -6,7 +6,7 @@ from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment
 from render.table_domain import RichCell, Span, Table
-from render.utils import RenderConfig, SegmentConfig, CleanConfig
+from render.config import RenderConfig, SegmentConfig, CleanConfig
 
 
 def _make_cfg(**overrides):
@@ -156,13 +156,13 @@ class TestBuildChain:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    @patch("render.expr.Image")
-    @patch("render.expr.RenderLaTeX")
-    @patch("render.expr.GetLaTeXObjs")
+    @patch("render.expr_render.Image")
+    @patch("render.expr_render.RenderLaTeX")
+    @patch("render.expr_render.GetLaTeXObjs")
     def test_inline_expr_real_renderer_contract(self, mock_getlatex, mock_render, mock_pil_image):
         """真实 render_expr 经 build_chain 统一契约调用，不抛参数不匹配。"""
         from render.chain import build_chain
-        from render.expr import render_expr
+        from render.expr_render import render_expr
 
         mock_getlatex.return_value = MagicMock()
         mock_render_img = MagicMock()
@@ -196,7 +196,7 @@ class TestBuildChain:
     def test_code_render_failure_fallback(self):
         """代码块渲染失败时回退为 Plain 原文，不影响后续段落。"""
         from render.chain import build_chain
-        from render.utils import RenderConfig
+        from render.config import RenderConfig
 
         fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
@@ -213,7 +213,7 @@ class TestBuildChain:
     def test_code_render_failure_keep_original_mode(self):
         """渲染且保留原文模式下渲染失败，只回退为原文（不重复）。"""
         from render.chain import build_chain
-        from render.utils import RenderConfig
+        from render.config import RenderConfig
 
         fake = MagicMock(side_effect=RuntimeError("Pygments crashed"))
         cfg = RenderConfig(
@@ -445,7 +445,7 @@ class TestElementTextRecipe:
     def test_code_recipe(self):
         """代码块：清洗开→裸代码，关闭/None→markdown 围栏原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.utils import CleanConfig
+        from render.config import CleanConfig
 
         seg = CodeBlock(lang="py", code="x=1")
         spec = _ELEMENT_SPECS[type(seg)]
@@ -456,7 +456,7 @@ class TestElementTextRecipe:
     def test_table_recipe(self):
         """表格：清洗开→无外管无分隔行，关闭/None→markdown 表格原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.utils import CleanConfig
+        from render.config import CleanConfig
 
         seg = self._table()
         spec = _ELEMENT_SPECS[type(seg)]
@@ -467,7 +467,7 @@ class TestElementTextRecipe:
     def test_inline_expr_recipe(self):
         """行内表达式：清洗开→裸公式，关闭/None→$ 包裹原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.utils import CleanConfig
+        from render.config import CleanConfig
 
         seg = InlineExpr(expr="x")
         spec = _ELEMENT_SPECS[type(seg)]
@@ -478,7 +478,7 @@ class TestElementTextRecipe:
     def test_block_expr_recipe(self):
         """块级表达式：清洗开→裸公式，关闭/None→$$ 包裹原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.utils import CleanConfig
+        from render.config import CleanConfig
 
         seg = BlockExpr(expr="x")
         spec = _ELEMENT_SPECS[type(seg)]
@@ -489,7 +489,7 @@ class TestElementTextRecipe:
     def test_segment_recipe(self):
         """纯文本段：清洗开→clean_markdown 清洗，None→原文。"""
         from render.chain import _ELEMENT_SPECS
-        from render.clean.md_cleaner import clean_markdown
+        from render.md_cleaner import clean_markdown
 
         seg = Segment(text="**加粗**")
         spec = _ELEMENT_SPECS[type(seg)]

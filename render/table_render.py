@@ -9,7 +9,7 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 
 from render.table_domain import RichCell, Span, Table
-from render.utils import get_font
+from render.font import get_font
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +35,11 @@ _STRIKE_Y_OFFSET = -4  # 删除线相对基线偏移（内部 px，按 _DPI 缩�
 
 def render_table(
     table: Table,
-    data_dir: str,
 ) -> bytes:
     """渲染表格为 PNG 图片。
 
     Args:
         table: Table 实例，含 headers 和 rows 属性（均为 RichCell）。
-        data_dir: 插件数据目录路径。
 
     Returns:
         png_path 渲染产物文件路径。
@@ -49,7 +47,7 @@ def render_table(
     headers: list[RichCell] = table.headers
     rows: list[list[RichCell]] = table.rows
 
-    font_reg = get_font(data_dir, _FONT_SIZE * _DPI)
+    font_reg = get_font(_FONT_SIZE * _DPI)
 
     all_rows: list[list[RichCell]] = []
     if headers:

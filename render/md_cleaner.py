@@ -8,7 +8,7 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 from render.inline_format import FormatState, advance
-from render.utils import CleanConfig
+from render.config import CleanConfig
 
 
 def clean_markdown(text: str, cfg: CleanConfig) -> str:

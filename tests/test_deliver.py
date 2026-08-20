@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from astrbot.api.message_components import Plain, Image, File
 
-from render.utils import SegmentConfig
+from render.config import SegmentConfig
 
 
 def _make_cfg(**overrides):

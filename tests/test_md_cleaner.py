@@ -1,8 +1,8 @@
 """md_cleaner 测试。"""
 from __future__ import annotations
 
-from render.clean.md_cleaner import clean_markdown
-from render.utils import CleanConfig
+from render.md_cleaner import clean_markdown
+from render.config import CleanConfig
 
 
 def _cfg(**overrides) -> CleanConfig:

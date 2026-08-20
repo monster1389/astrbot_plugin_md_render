@@ -13,20 +13,18 @@ from pygments import highlight
 from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer
 
-from render.utils import find_font_path
+from render.font import find_font_path
 
 logger = logging.getLogger(__name__)
 
 
 def render_code(
     codeblock: object,
-    data_dir: str,
 ) -> bytes:
     """渲染代码块为 PNG 图片。
 
     Args:
         codeblock: CodeBlock 实例，含 lang 和 code 属性。
-        data_dir: 插件数据目录路径。
 
     Returns:
         PNG 图片字节。
@@ -46,7 +44,7 @@ def render_code(
         line_numbers=False,
         image_pad=27,  # 10pt @ 150 DPI
         line_pad=8,    # 4px @ 150 DPI
-        font_name=find_font_path(data_dir) or "DejaVuSansMono",
+        font_name=find_font_path() or "DejaVuSansMono",
     )
     png_data = highlight(code, lexer, formatter)
 

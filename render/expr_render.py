@@ -16,7 +16,7 @@ _FONT_COLOR = "#9CDCFE"
 _BG_COLOR = "#1E1E1E"
 
 
-def render_expr(expr: object, data_dir: str) -> bytes:
+def render_expr(expr: object) -> bytes:
     """渲染数学表达式为 PNG。
 
     pillowlatex 渲染黑字透明背景，用 alpha 通道将文字着色后
@@ -24,7 +24,6 @@ def render_expr(expr: object, data_dir: str) -> bytes:
 
     Args:
         expr: InlineExpr/BlockExpr 实例，含 expr 属性（不含 $ 分隔符）。
-        data_dir: 插件数据目录路径，统一渲染器契约参数，本渲染器不使用。
 
     Returns:
         渲染产物 PNG 字节串。

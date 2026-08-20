@@ -1,47 +1,10 @@
-"""配置读取、颜色解析、字体发现。
+"""配置 dataclass 与读取。
 
-导出: RenderConfig, SegmentConfig, CleanConfig, load_config, get_font,
-      find_font_path
+导出: RenderConfig, SegmentConfig, CleanConfig, load_config
 """
 from __future__ import annotations
 
-import logging
-import os
-import threading
 from dataclasses import dataclass
-
-from PIL import ImageFont
-
-logger = logging.getLogger(__name__)
-
-_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
-_font_path: str | None = None
-_lock = threading.Lock()
-
-
-def get_font(data_dir: str, size: int) -> ImageFont.FreeTypeFont:
-    """获取缓存的字体，按字号缓存，路径变更时全清。线程安全。
-
-    Args:
-        data_dir: 插件数据目录路径。
-        size: 字号（像素）。
-
-    Returns:
-        PIL 字体对象。字体不可用时回退为默认位图字体。
-    """
-    global _font_cache, _font_path
-    path = find_font_path(data_dir)
-    with _lock:
-        if path != _font_path:
-            _font_cache.clear()
-            _font_path = path
-        if size not in _font_cache:
-            if path is None:
-                logger.warning("未找到中文字体，将使用默认位图字体，中文将显示为豆腐块")
-                _font_cache[size] = ImageFont.load_default()
-            else:
-                _font_cache[size] = ImageFont.truetype(path, size)
-        return _font_cache[size]
 
 
 @dataclass(frozen=True)
@@ -159,29 +122,3 @@ def load_config(raw: dict) -> tuple[RenderConfig, SegmentConfig, CleanConfig]:
     )
 
     return render_cfg, segment_cfg, clean_cfg
-
-
-def find_font_path(data_dir: str | None = None) -> str | None:
-    """发现可用中文字体。
-
-    优先使用捆绑的更纱等宽黑体（中英 2:1 等宽），
-    不存在时 fallback 到系统字体。
-
-    Args:
-        data_dir: 插件数据目录路径，为 None 时只搜系统字体。
-
-    Returns:
-        第一个存在的字体路径，都没找到返回 None。
-    """
-    candidates: list[str] = []
-    if data_dir:
-        candidates.append(os.path.join(data_dir, "fonts", "SarasaMonoSC-Regular.ttf"))
-    candidates += [
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return None

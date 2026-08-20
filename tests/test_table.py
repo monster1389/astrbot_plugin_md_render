@@ -9,9 +9,9 @@ def _cell(text: str) -> RichCell:
 
 
 class TestRenderTable:
-    @patch("render.table.ImageDraw")
-    @patch("render.table.Image")
-    @patch("render.table.get_font")
+    @patch("render.table_render.ImageDraw")
+    @patch("render.table_render.Image")
+    @patch("render.font.get_font")
     def test_renders_simple_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """简单表格渲染返回字节数据。"""
         mock_font = MagicMock()
@@ -30,16 +30,16 @@ class TestRenderTable:
             rows=[[_cell("张三"), _cell("20")], [_cell("李四"), _cell("25")]],
         )
 
-        from render.table import render_table
-        png_bytes = render_table(tbl, data_dir="/tmp")
+        from render.table_render import render_table
+        png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
-    @patch("render.table.ImageDraw")
-    @patch("render.table.Image")
-    @patch("render.table.get_font")
+    @patch("render.table_render.ImageDraw")
+    @patch("render.table_render.Image")
+    @patch("render.font.get_font")
     def test_empty_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """空表格也能渲染。"""
         mock_font = MagicMock()
@@ -55,16 +55,16 @@ class TestRenderTable:
 
         tbl = Table(headers=[_cell("A")], rows=[])
 
-        from render.table import render_table
-        png_bytes = render_table(tbl, data_dir="/tmp")
+        from render.table_render import render_table
+        png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
-    @patch("render.table.ImageDraw")
-    @patch("render.table.Image")
-    @patch("render.table.get_font")
+    @patch("render.table_render.ImageDraw")
+    @patch("render.table_render.Image")
+    @patch("render.font.get_font")
     def test_rich_cell_with_bold_and_italic(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """包含加粗和斜体 Span 的富文本单元格正确渲染。"""
         mock_font = MagicMock()
@@ -88,16 +88,16 @@ class TestRenderTable:
             ],
         )
 
-        from render.table import render_table
-        png_bytes = render_table(tbl, data_dir="/tmp")
+        from render.table_render import render_table
+        png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
 
-    @patch("render.table.ImageDraw")
-    @patch("render.table.Image")
-    @patch("render.table.get_font")
+    @patch("render.table_render.ImageDraw")
+    @patch("render.table_render.Image")
+    @patch("render.font.get_font")
     def test_all_span_formats(self, mock_get_font, mock_img_cls, mock_draw_cls):
         """全部 5 种格式 Span 均能渲染。"""
         mock_font = MagicMock()
@@ -124,8 +124,8 @@ class TestRenderTable:
             ],
         )
 
-        from render.table import render_table
-        png_bytes = render_table(tbl, data_dir="/tmp")
+        from render.table_render import render_table
+        png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0

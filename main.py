@@ -26,9 +26,10 @@ if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
 from render.chain import process_chain  # noqa: E402
-from render.tempstore import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
+from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
-from render.utils import load_config  # noqa: E402
+from render.font import init_font  # noqa: E402
+from render.tempstore import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
 
 # 国内直连 GitHub 不稳定，gh-proxy 镜像前置兜底
 _FONT_URLS = [
@@ -97,6 +98,7 @@ class MdRenderPlugin(Star):
         font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
         if not os.path.exists(font_path):
             asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
+        init_font(str(data_dir))
         self.cfg, self.seg_cfg, self.clean_cfg = load_config(self.config)
         _start_cleaner(str(data_dir), self.cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
