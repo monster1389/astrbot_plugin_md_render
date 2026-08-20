@@ -8,7 +8,7 @@ import logging
 
 from PIL import Image, ImageDraw, ImageFont
 
-from render.parser import RichCell, Span, Table
+from render.table_domain import RichCell, Span, Table
 from render.utils import get_font
 
 logger = logging.getLogger(__name__)

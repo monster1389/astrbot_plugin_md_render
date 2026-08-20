@@ -14,18 +14,9 @@ from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.code import render_code
 from render.expr import render_expr
-from render.parser import (
-    BlockExpr,
-    CodeBlock,
-    Divider,
-    InlineExpr,
-    Segment,
-    Table,
-    parse,
-    table_to_markdown,
-    table_to_plain,
-)
+from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment, parse
 from render.table import render_table
+from render.table_domain import Table, table_to_markdown, table_to_plain
 from render.clean.md_cleaner import clean_markdown
 from render.tempstore import build_temp_path
 from render.utils import RenderConfig, SegmentConfig, CleanConfig

@@ -1,7 +1,7 @@
 """表格渲染测试。"""
 from unittest.mock import MagicMock, patch
 
-from render.parser import RichCell, Span, Table
+from render.table_domain import RichCell, Span, Table
 
 
 def _cell(text: str) -> RichCell:
@@ -136,14 +136,14 @@ class TestTableToText:
     """table_to_markdown 从 RichCell 重建 markdown。"""
 
     def test_plain_cell(self):
-        from render.parser import table_to_markdown
+        from render.table_domain import table_to_markdown
         t = Table(headers=[_cell("A")], rows=[[_cell("1")]])
         result = table_to_markdown(t)
         assert "| A |" in result
         assert "| 1 |" in result
 
     def test_bold_cell(self):
-        from render.parser import table_to_markdown
+        from render.table_domain import table_to_markdown
         t = Table(
             headers=[_cell("H")],
             rows=[[RichCell(spans=[Span(text="bold", bold=True)])]],
@@ -152,7 +152,7 @@ class TestTableToText:
         assert "| **bold** |" in result
 
     def test_mixed_cell(self):
-        from render.parser import table_to_markdown
+        from render.table_domain import table_to_markdown
         t = Table(
             headers=[_cell("H")],
             rows=[[RichCell(spans=[

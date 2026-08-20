@@ -4,7 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
-from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, RichCell, Segment, Span, Table
+from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment
+from render.table_domain import RichCell, Span, Table
 from render.utils import RenderConfig, SegmentConfig, CleanConfig
 
 
