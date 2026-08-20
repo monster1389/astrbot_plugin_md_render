@@ -12,6 +12,8 @@ from typing import Callable
 
 from markdown_it.token import Token
 
+from render.inline_format import FormatState, advance
+
 
 @dataclass
 class Span:
@@ -99,9 +101,8 @@ def table_to_plain(table: Table) -> str:
 def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
     """从 inline token 的 children 中提取 Span 列表。
 
-    追踪 strong_open/close、em_open/close、s_open/close、
-    code_inline、link_open/close 状态开关，为每段 text 生成
-    携带当前格式状态的 Span。
+    借助共享状态机 advance 追踪 strong/em/s/link 开关，为每段 text
+    生成携带当前格式状态的 Span；code_inline 单独产出 code 标记。
 
     Args:
         tokens: inline token 的 children 列表。
@@ -110,38 +111,19 @@ def _extract_spans_from_children(tokens: list[Token]) -> list[Span]:
         解析后的 Span 列表。
     """
     spans: list[Span] = []
-    bold = False
-    italic = False
-    strike = False
-    code = False
-    link_url = ""
+    state = FormatState()
     for t in tokens:
         if t.type == "text":
             if t.content:
-                spans.append(Span(t.content, bold=bold, italic=italic,
-                                  strike=strike, code=code, link_url=link_url))
-        elif t.type == "strong_open":
-            bold = True
-        elif t.type == "strong_close":
-            bold = False
-        elif t.type == "em_open":
-            italic = True
-        elif t.type == "em_close":
-            italic = False
-        elif t.type == "s_open":
-            strike = True
-        elif t.type == "s_close":
-            strike = False
+                spans.append(Span(t.content, bold=state.bold, italic=state.italic,
+                                  strike=state.strike, link_url=state.link_url))
         elif t.type == "code_inline":
-            spans.append(Span(t.content, bold=bold, italic=italic,
-                              strike=strike, code=True, link_url=link_url))
-        elif t.type == "link_open":
-            link_url = t.attrs.get("href", "")
-        elif t.type == "link_close":
-            link_url = ""
+            spans.append(Span(t.content, bold=state.bold, italic=state.italic,
+                              strike=state.strike, code=True, link_url=state.link_url))
         elif t.type == "softbreak":
-            spans.append(Span(" ", bold=bold, italic=italic,
-                              strike=strike, code=code, link_url=link_url))
+            spans.append(Span(" ", bold=state.bold, italic=state.italic,
+                              strike=state.strike, link_url=state.link_url))
+        state = advance(state, t)
     return spans
 
 

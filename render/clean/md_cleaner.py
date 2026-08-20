@@ -7,6 +7,7 @@ from __future__ import annotations
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
+from render.inline_format import FormatState, advance
 from render.utils import CleanConfig
 
 
@@ -174,40 +175,28 @@ def _walk(tokens: list[Token], cfg: CleanConfig, parent_type: str | None) -> str
 def _walk_inline(children: list[Token], cfg: CleanConfig) -> str:
     """处理 inline token 的子节点。"""
     parts: list[str] = []
-    link_href: str = ""
+    state = FormatState()
 
     for t in children:
         if t.type == "text":
             parts.append(t.content)
         elif t.type == "strong_open":
-            if cfg.bold:
-                pass
-            else:
+            if not cfg.bold:
                 parts.append(t.markup)
         elif t.type == "strong_close":
-            if cfg.bold:
-                pass
-            else:
+            if not cfg.bold:
                 parts.append(t.markup)
         elif t.type == "em_open":
-            if cfg.italic:
-                pass
-            else:
+            if not cfg.italic:
                 parts.append(t.markup)
         elif t.type == "em_close":
-            if cfg.italic:
-                pass
-            else:
+            if not cfg.italic:
                 parts.append(t.markup)
         elif t.type == "s_open":
-            if cfg.strikethrough:
-                pass
-            else:
+            if not cfg.strikethrough:
                 parts.append(t.markup)
         elif t.type == "s_close":
-            if cfg.strikethrough:
-                pass
-            else:
+            if not cfg.strikethrough:
                 parts.append(t.markup)
         elif t.type == "code_inline":
             if cfg.inline_code:
@@ -215,15 +204,13 @@ def _walk_inline(children: list[Token], cfg: CleanConfig) -> str:
             else:
                 parts.append(f"`{t.content}`")
         elif t.type == "link_open":
-            link_href = t.attrs.get("href", "") if t.attrs else ""
             if not cfg.link:
                 parts.append("[")
         elif t.type == "link_close":
             if cfg.link:
-                parts.append(f" ({link_href})")
+                parts.append(f" ({state.link_url})")
             else:
-                parts.append(f"]({link_href})")
-            link_href = ""
+                parts.append(f"]({state.link_url})")
         elif t.type == "image":
             alt = t.content or ""
             src = t.attrs.get("src", "") if t.attrs else ""
@@ -247,5 +234,6 @@ def _walk_inline(children: list[Token], cfg: CleanConfig) -> str:
                 parts.append(t.content)
             elif hasattr(t, "markup") and t.markup:
                 parts.append(t.markup)
+        state = advance(state, t)
 
     return "".join(parts)
