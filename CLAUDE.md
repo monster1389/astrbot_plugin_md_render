@@ -10,29 +10,32 @@ AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**、**表格**和**
 
 ## 常用命令
 
-```bash
-# 所有命令用绝对路径直接调用 .venv 内的二进制，无需 source activate
-# （避免审批步骤，一条命令完成）
+插件运行在 Docker 容器 `astrbot`（soulter/astrbot）内，容器内路径 `/AstrBot/data/plugins/astrbot_plugin_md_render` 与宿主机本目录 bind mount 同步。**宿主机不再维护 .venv**，所有检查/测试/装包一律 docker exec 进容器执行，一条命令完成：
 
+```bash
 # 代码检查
-.venv/bin/ruff check .
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot ruff check .
 
 # 运行全部测试
-.venv/bin/pytest
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest
 
 # 运行单个测试文件/用例
-.venv/bin/pytest tests/test_xxx.py
-.venv/bin/pytest tests/test_xxx.py::test_func_name -v
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest tests/test_xxx.py
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest tests/test_xxx.py::test_func_name -v
 
-# 安装依赖
-.venv/bin/pip install -r requirements.txt
+# 安装/更新依赖（容器内全局环境，测试框架 pytest/ruff 已预装）
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pip install -r requirements.txt
+
+# 改动生效：重启 astrbot 容器
+docker restart astrbot
 ```
 
 ## 环境约束
 
-- **所有 Python 操作必须走 `.venv` 内的二进制**：用 `.venv/bin/pytest`、`.venv/bin/ruff`、`.venv/bin/pip` 等绝对路径
-- **禁止向系统 Python 安装包**：不得 `pip install` 到全局环境，subagent 也必须用 `.venv/bin/pip`
+- **所有 Python 操作一律在 `astrbot` 容器内执行**：用 `docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot <命令>`，宿主机不建 .venv、不向宿主机/系统 Python 装包，subagent 同样必须如此
+- **容器内即插件运行环境**（Python 3.12 全局环境）：`pip install` 直接作用于容器全局，只安装 requirements.txt 声明的依赖，不随意升降级容器内已装包
 - **依赖已在 requirements.txt 声明**：新增依赖先加文件再 install
+- **代码改动后需重启容器生效**：`docker restart astrbot`（改配置/装依赖后同理）
 
 ## 编码规范
 
@@ -75,7 +78,7 @@ RespondStage 发送最终 chain
 
 配置与基础设施各自独立成模块：
 - `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造
-- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_path()` / `get_font(size)`，优先捆绑的更纱等宽黑体，按字号缓存
+- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_path()` / `get_font(size)`，发现 `data_dir/fonts/SarasaMonoSC-Regular.ttf`（手动放置，不自动下载）并回退系统字体，按字号缓存
 - `render/tempstore.py` — 临时文件命名 `build_temp_path(data_dir, prefix, ext)` / 删除 / 刷新 + 后台按 TTL 清扫
 
 ### 模块
@@ -103,7 +106,7 @@ RespondStage 发送最终 chain
 
 ### 依赖
 
-`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`, `py7zr`
+`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`
 
 ### 配置
 

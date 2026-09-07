@@ -2,6 +2,32 @@
 
 把 QQ 消息中的 Markdown **代码块**、**表格**、**数学表达式**渲染为图片，让机器人回复不再满屏源码。表格支持格内 **加粗**、*斜体*、~~删除线~~、`代码`、[链接](url) 等行内格式。
 
+## ⚠️ 手动安装中文字体（必读）
+
+插件已移除「启动时自动下载并解压字体」的逻辑，需要手动把中文字体放进插件数据目录。未安装时图片中的中文会退化为系统字体；系统也无中文字体时显示为方块（豆腐块）。
+
+**强烈建议 [更纱等宽黑体（Sarasa Mono SC）](https://github.com/be5invis/Sarasa-Gothic)**：中英文严格 2:1 等宽，代码块对齐效果最佳。以下命令在 AstrBot 所在机器执行，**完成后重启 AstrBot 生效**：
+
+```bash
+# 1) 下载压缩包（约 68MB；GitHub 直连不稳时默认走镜像，失败换注释里的直连）
+wget https://gh-proxy.com/https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z
+# 镜像失败则直连：wget https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z
+
+# 2) 解压出 Regular 字重（约 25MB），只需这一个文件；没有 7z 先装：apt-get install -y p7zip-full
+7z e SarasaMonoSC-TTF-1.0.27.7z SarasaMonoSC-Regular.ttf
+
+# 3) 放进插件字体目录（DATA_DIR = AstrBot 数据目录，Docker 镜像默认为 /AstrBot/data）
+DATA_DIR=/AstrBot/data
+FONT_DIR="$DATA_DIR/plugin_data/astrbot_plugin_md_render/fonts"
+mkdir -p "$FONT_DIR"
+mv SarasaMonoSC-Regular.ttf "$FONT_DIR/"
+
+# 4) 重启生效（非 Docker 部署：在 AstrBot 管理面板重启/重载插件）
+docker restart astrbot
+```
+
+也可以使用任意其它中文字体：将 `.ttf` 重命名为 `SarasaMonoSC-Regular.ttf` 放入上述目录即可。
+
 ## 效果展示
 
 ![聊天效果](docs/demo/chat.jpg)
@@ -36,10 +62,6 @@
 - **代码块 / 表格 / 块级表达式**（`$$...$$`）各自独立成条；「渲染且保留原文」下原文与图片分两条发送，互不粘连。
 - 内联流被块级元素打断时，块级元素前后的文字段各自携带行内表达式合并成条。
 - 空行、分隔线切分照旧生效。纯文本消息保持单条不拆。
-
-### 字体自动下载
-
-插件首次启动会自动下载 [更纱等宽黑体](https://github.com/be5invis/Sarasa-Gothic)（Sarasa Mono SC），中英文 2:1 严格等宽。官方安装包为 7z 压缩包（约 68 MB，含 10 个字重），插件仅解压其中的 Regular 字重（约 25 MB）。下载走 gh-proxy 镜像，失败回退 GitHub 直连。下载不阻塞启动，期间代码块可能无中文字体。
 
 ### Markdown 格式清洗
 
