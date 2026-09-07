@@ -5,7 +5,7 @@ desc: |-
   分段
   Markdown 清洗
   安装字体看README.md
-version: v1.3.4
+version: v1.3.5
 author: monster1389
 repo: "https://github.com/monster1389/astrbot_plugin_md_render"
 support_platforms:

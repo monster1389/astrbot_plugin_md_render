@@ -2,6 +2,15 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.3.5] - 2026-09-07
+
+### 移除
+- 移除启动时自动下载并解压「更纱等宽黑体」的逻辑及 `py7zr` 依赖（通过安全审查：不再于运行时下载外部 7z 压缩包并解包）。字体改为手动安装：下载 `SarasaMonoSC-Regular.ttf` 放入 `<AstrBot 数据目录>/plugin_data/astrbot_plugin_md_render/fonts/`，README 顶部附完整下载/解压/放置/重启命令，安装后重启 AstrBot 生效。
+
+### 其他
+- `typing.Callable` 迁移到 `collections.abc`，全量清理 import 排序，容器内 ruff 0.15.22 零告警。
+- CLAUDE.md 开发环境由宿主机 `.venv` 改为容器内 `docker exec` 执行；README/metadata 改为手动安装字体指引。
+
 ## [1.3.4] - 2026-08-20
 
 ### 重构
