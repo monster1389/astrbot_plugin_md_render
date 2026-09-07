@@ -13,10 +13,9 @@ import random
 from collections.abc import Awaitable, Callable
 
 from astrbot.api import logger
-
 from render.chain import has_media
-from render.tempstore import delete, is_temp_file, touch
 from render.config import SegmentConfig
+from render.tempstore import delete, is_temp_file, touch
 
 # 发送延时范围（秒）：媒体消息 1~3s 防风控，纯文本 0.3~1s
 _DELAY_RANGES: dict[bool, tuple[float, float]] = {

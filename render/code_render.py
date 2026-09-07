@@ -8,7 +8,6 @@ import io
 import logging
 
 from PIL import Image
-
 from pygments import highlight
 from pygments.formatters.img import ImageFormatter
 from pygments.lexers import get_lexer_by_name, guess_lexer

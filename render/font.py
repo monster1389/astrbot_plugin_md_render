@@ -2,7 +2,7 @@
 
 字体是全局基础设施：initialize() 用 init_font(data_dir) 记录数据目录，
 渲染器按需取字体名（pygments）或字体对象（Pillow）。发现每次刷新，
-路径变化时清空字号缓存，保证异步下载中的捆绑字体落地后能被拾取。
+路径变化时清空字号缓存，保证手动放入的字体落地后能被拾取。
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def init_font(data_dir: str | None = None) -> None:
     """记录字体搜索目录；为 None 时只搜系统字体。
 
     Args:
-        data_dir: 插件数据目录路径，捆绑字体在其 fonts/ 子目录。
+        data_dir: 插件数据目录路径，手动放置的字体在其 fonts/ 子目录。
     """
     global _font_dir
     _font_dir = data_dir
@@ -66,7 +66,7 @@ def get_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _discover_font_path(data_dir: str | None) -> str | None:
-    """在捆绑字体与系统字体间发现第一个存在的路径。
+    """在插件字体与系统字体间发现第一个存在的路径。
 
     Args:
         data_dir: 插件数据目录路径，为 None 时只搜系统字体。

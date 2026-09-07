@@ -7,8 +7,8 @@ from __future__ import annotations
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-from render.inline_format import FormatState, advance
 from render.config import CleanConfig
+from render.inline_format import FormatState, advance
 
 
 def clean_markdown(text: str, cfg: CleanConfig) -> str:

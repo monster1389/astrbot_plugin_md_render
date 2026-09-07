@@ -7,13 +7,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
-from astrbot.api.message_components import Plain, Image, File as AstrFile
-
+from astrbot.api.message_components import File as AstrFile
+from astrbot.api.message_components import Image, Plain
 from render.code_render import render_code
-from render.config import RenderConfig, SegmentConfig, CleanConfig
+from render.config import CleanConfig, RenderConfig, SegmentConfig
 from render.expr_render import render_expr
 from render.md_cleaner import clean_markdown
 from render.parser import (

@@ -8,7 +8,6 @@ from __future__ import annotations
 from io import BytesIO
 
 from PIL import Image
-
 from pillowlatex import GetLaTeXObjs, RenderLaTeX
 
 # VS Code dark theme 配色

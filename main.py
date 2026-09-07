@@ -5,20 +5,14 @@
 """
 from __future__ import annotations
 
-import asyncio
-import io
 import os
-import shutil
 import sys
-import tempfile
-import urllib.request
 from typing import Any
-
-import py7zr
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.message_components import Image, File as AstrFile
+from astrbot.api.message_components import File as AstrFile
+from astrbot.api.message_components import Image
 from astrbot.api.star import Context, Star, StarTools, register
 
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,43 +23,8 @@ from render.chain import process_chain  # noqa: E402
 from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
 from render.font import init_font  # noqa: E402
-from render.tempstore import start as _start_cleaner, stop as _stop_cleaner  # noqa: E402
-
-# 国内直连 GitHub 不稳定，gh-proxy 镜像前置兜底
-_FONT_URLS = [
-    "https://gh-proxy.com/https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
-    "https://github.com/be5invis/Sarasa-Gothic/releases/download/v1.0.27/SarasaMonoSC-TTF-1.0.27.7z",
-]
-
-
-def _download_sarasa_font(fonts_dir: str) -> bool:
-    """尝试下载更纱等宽黑体，成功返回 True，失败返回 False。
-
-    用 py7zr 从 7z 压缩包中提取 SarasaMonoSC-Regular.ttf。
-
-    Args:
-        fonts_dir: 字体存放目录路径。
-    """
-    for url in _FONT_URLS:
-        try:
-            logger.info("正在下载更纱字体: %s", url)
-            req = urllib.request.Request(url, headers={"User-Agent": "astrbot-md-render"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                data = resp.read()
-            with py7zr.SevenZipFile(io.BytesIO(data)) as archive:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    archive.extract(path=tmpdir, targets=["SarasaMonoSC-Regular.ttf"])
-                    src = os.path.join(tmpdir, "SarasaMonoSC-Regular.ttf")
-                    if os.path.exists(src):
-                        dst = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
-                        shutil.move(src, dst)
-                    else:
-                        raise FileNotFoundError("SarasaMonoSC-Regular.ttf 未在压缩包中找到")
-            logger.info("更纱字体下载成功，已保存至 %s", os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf"))
-            return True
-        except Exception:
-            logger.warning("从 %s 下载更纱字体失败", url, exc_info=True)
-    return False
+from render.tempstore import start as _start_cleaner  # noqa: E402
+from render.tempstore import stop as _stop_cleaner  # noqa: E402
 
 
 @register(
@@ -93,11 +52,6 @@ class MdRenderPlugin(Star):
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
         temp_dir = os.path.join(data_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
-        fonts_dir = os.path.join(data_dir, "fonts")
-        os.makedirs(fonts_dir, exist_ok=True)
-        font_path = os.path.join(fonts_dir, "SarasaMonoSC-Regular.ttf")
-        if not os.path.exists(font_path):
-            asyncio.get_running_loop().run_in_executor(None, _download_sarasa_font, fonts_dir)
         init_font(str(data_dir))
         self.cfg, self.seg_cfg, self.clean_cfg = load_config(self.config)
         _start_cleaner(str(data_dir), self.cfg.temp_ttl)

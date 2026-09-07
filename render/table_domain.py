@@ -7,8 +7,8 @@ parse_table 是 markdown-it token 流的唯一入口，格内占位符还原
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from markdown_it.token import Token
 
