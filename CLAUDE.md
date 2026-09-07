@@ -74,6 +74,68 @@ OnDecoratingResultEvent (priority=1000)  ← 本插件
 RespondStage 发送最终 chain
 ```
 
+### 模块结构
+
+```mermaid
+flowchart LR
+  subgraph 入口
+    main["main.py<br/>插件入口"]
+  end
+  subgraph 组装
+    chain["chain.py<br/>配方 + 分组 + 拆条 + 管线"]
+  end
+  subgraph 元素域
+    parser["parser.py<br/>解析 + 类型"]
+    tdom["table_domain.py<br/>表格子域"]
+    ifmt["inline_format.py<br/>格式状态机"]
+    mdc["md_cleaner.py<br/>清洗"]
+  end
+  subgraph 渲染器
+    code_r["code_render.py"]
+    table_r["table_render.py"]
+    expr_r["expr_render.py"]
+  end
+  subgraph 基础设施
+    font["font.py<br/>字体服务"]
+    cfg["config.py<br/>配置"]
+    ts["tempstore.py<br/>临时文件"]
+    deliv["deliver.py<br/>送达"]
+  end
+
+  main --> chain
+  main --> cfg
+  main --> deliv
+  main --> font
+  main --> ts
+  chain --> code_r
+  chain --> cfg
+  chain --> expr_r
+  chain --> mdc
+  chain --> parser
+  chain --> tdom
+  chain --> table_r
+  chain --> ts
+  code_r --> font
+  parser --> tdom
+  mdc --> ifmt
+  mdc --> cfg
+  deliv --> chain
+  deliv --> ts
+  deliv --> cfg
+  table_r --> tdom
+  table_r --> font
+  tdom --> ifmt
+
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
+  classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
+  class main,chain deep;
+  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,deliv mid;
+  class font,cfg,ts leaf;
+```
+
+深色 = 深模块（接口小、实现厚）· 中色 = 元素域/渲染器 · 浅色 = 基础设施叶模块。
+
 ### 配置与基础设施
 
 配置与基础设施各自独立成模块：
@@ -110,21 +172,19 @@ RespondStage 发送最终 chain
 
 ### 配置
 
-通过 AstrBot 内置配置系统，`_conf_schema.json` 提供嵌套配置块：
+通过 AstrBot 内置配置系统，`_conf_schema.json` 提供三个嵌套配置块，`load_config` 按 `raw["渲染"]` / `raw["分段"]` / `raw["清洗"]` 构造：
 
 **渲染**（`raw["渲染"]`）：
-- 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件
-- 表格：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件
-- 表达式：不处理 / 渲染图像 / 渲染且保留原文
-- 分隔线：不处理 / 切分
-- 连续换行：不处理 / 切分
-- 发送延时：开/关（默认开），切分后多条消息间随机延时 1~3 秒防风控
+- 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染且md文件）
+- 表格：同上五选项（默认 渲染图像）
+- 表达式：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像）
 - 临时文件存活（分钟）：3=默认保留 3 分钟，0=即时删除，-1=永久保留
 
-**清洗**（`raw["清洗"]`）：
-- 加粗/斜体/删除线/行内代码/链接/标题/无序列表/有序列表/引用/图片：bool 开关，默认全部开启
-- 代码块/表格/表达式（清洗）：bool 开关，默认关闭
-- 清洗基于 markdown-it-py token 树，颜表情中的 `*` `_` `~` 不会被误杀
+**分段**（`raw["分段"]`）：
+- 分隔线 / 连续换行：不处理 / 切分（默认切分）
+- 发送延时：开/关（默认开），切分后多条消息间随机延时 1~3 秒防风控
+
+**清洗**（`raw["清洗"]`）：15 个 bool 开关。加粗/斜体/删除线/行内代码/链接/标题/无序列表/有序列表/引用/图片/分隔线/连续换行默认开（去除格式标记、压缩空行）；代码块/表格/表达式默认关（仅元素以文本保留时生效）。清洗基于 markdown-it-py token 树，颜表情中的 `*` `_` `~` 不会被误杀
 
 ### 设计文档
 
