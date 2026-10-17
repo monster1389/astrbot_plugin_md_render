@@ -2,59 +2,59 @@
   "仅处理模型回复": {
     "type": "bool",
     "description": "仅处理模型回复",
-    "hint": "开启后只渲染 LLM / Agent 产出的回复；其它插件与内置命令的普通消息原样放过。",
+    "hint": "只渲染 LLM 与 Agent 的回复。其它插件与内置命令的消息原样发出。",
     "default": false
   },
   "渲染": {
     "type": "object",
     "description": "渲染",
-    "hint": "将 Markdown 代码块、表格、数学表达式渲染为图片。",
+    "hint": "把代码块、表格、表达式、Mermaid、HTML 文档渲染为图片或 .md 文件。",
     "items": {
       "代码块": {
         "type": "string",
         "description": "代码块",
-        "hint": "将围栏代码块渲染为图片，'仅md文件' 不渲染只发 .md。",
+        "hint": "把围栏代码块渲染为图片。渲染且md文件附一个 .md 源码文件，仅md文件只发 .md。",
         "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
         "default": "渲染且md文件"
       },
       "表格": {
         "type": "string",
         "description": "表格",
-        "hint": "将 Markdown 表格渲染为图片，支持格内加粗、斜体、删除线、行内代码、链接。",
+        "hint": "把 Markdown 表格渲染为图片，支持格内加粗、斜体、删除线、行内代码、链接。",
         "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
         "default": "渲染图像"
       },
       "表达式": {
         "type": "string",
         "description": "数学表达式",
-        "hint": "将 $...$ 行内和 $$...$$ 块级 LaTeX 表达式渲染为图片。",
+        "hint": "把 $...$ 行内与 $$...$$ 块级 LaTeX 表达式渲染为图片。",
         "options": ["不处理", "渲染图像", "渲染且保留原文"],
         "default": "渲染图像"
       },
       "Mermaid": {
         "type": "string",
         "description": "Mermaid 图表",
-        "hint": "将 ```mermaid 图表渲染为图片或 .md 文件。图片走 mermaid.ink 外部服务，需联网；md 文件由 QQ 原生渲染。",
+        "hint": "把 mermaid 图表渲染为图片或 .md 文件。图片走 mermaid.ink，需要联网。",
         "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
         "default": "渲染图像"
       },
       "HTML": {
         "type": "string",
         "description": "HTML 文档",
-        "hint": "将完整的 ```html 文档（含 <!DOCTYPE 或 <html>）渲染为图片。无浏览器，支持常用 CSS；HTML 片段仍按代码块处理。",
+        "hint": "把完整 HTML 文档渲染为图片，片段按代码块处理。无浏览器，支持常用 CSS。",
         "options": ["不处理", "渲染图像", "渲染且保留原文"],
         "default": "渲染图像"
       },
       "HTML 宽度": {
         "type": "int",
         "description": "HTML 宽度",
-        "hint": "HTML 文档渲染宽度（像素），高度按内容自适应。",
+        "hint": "HTML 文档的渲染宽度，单位为像素。高度按内容自适应。",
         "default": 1000
       },
       "临时文件存活": {
         "type": "int",
         "description": "临时文件存活",
-        "hint": "渲染产物保留时长（分钟）。0=发送完成后立即删除，-1=永久保留。",
+        "hint": "渲染产物的保留时长，单位为分钟。0 表示发送完成即删除，-1 表示永久保留。",
         "default": 3
       }
     }
@@ -62,26 +62,26 @@
   "分段": {
     "type": "object",
     "description": "分段",
-    "hint": "在分隔线或空行处将消息拆成多条独立 QQ 消息。",
+    "hint": "在分隔线或空行处把消息拆成多条独立 QQ 消息。",
     "items": {
       "分隔线": {
         "type": "string",
         "description": "分隔线",
-        "hint": "对 --- 分隔线的处理方式。'切分' 在分隔线处拆成多条 QQ 消息。",
+        "hint": "处理 --- 分隔线。切分表示在分隔线处拆成多条 QQ 消息。",
         "options": ["不处理", "切分"],
         "default": "切分"
       },
       "连续换行": {
         "type": "string",
         "description": "连续换行",
-        "hint": "对空行（连续换行）的处理方式。'切分' 在空行处拆成多条 QQ 消息。",
+        "hint": "处理空行。切分表示在空行处拆成多条 QQ 消息。",
         "options": ["不处理", "切分"],
         "default": "切分"
       },
       "发送延时": {
         "type": "bool",
         "description": "发送延时",
-        "hint": "多条消息之间随机延时防风控：图片/文件间 1~3 秒，纯文本间 0.3~1 秒。",
+        "hint": "多条消息之间随机等待防风控。图片与文件之间 1~3 秒，纯文本之间 0.3~1 秒。",
         "default": true
       }
     }
@@ -91,21 +91,21 @@
     "description": "清洗",
     "hint": "去除未渲染的 Markdown 格式标记，让纯文本消息更干净。",
     "items": {
-      "加粗": { "type": "bool", "description": "加粗", "hint": "去除 **text** 标记，保留文本。", "default": true },
-      "斜体": { "type": "bool", "description": "斜体", "hint": "去除 *text* 标记，保留文本。", "default": true },
-      "删除线": { "type": "bool", "description": "删除线", "hint": "去除 ~~text~~ 标记，保留文本。", "default": true },
-      "行内代码": { "type": "bool", "description": "行内代码", "hint": "去除 `text` 标记，保留文本。", "default": true },
-      "链接": { "type": "bool", "description": "链接", "hint": "将 [text](url) 转为 'text (url)' 格式。", "default": true },
-      "标题": { "type": "bool", "description": "标题", "hint": "去除行首 # 标记，保留文本。", "default": true },
-      "列表标记（无序）": { "type": "bool", "description": "无序列表", "hint": "去除 - 无序列表前缀标记。", "default": true },
-      "列表标记（有序）": { "type": "bool", "description": "有序列表", "hint": "去除 1. 有序列表前缀标记。", "default": true },
-      "引用": { "type": "bool", "description": "引用", "hint": "去除 > 引用前缀标记。", "default": true },
-      "图片": { "type": "bool", "description": "图片", "hint": "将 ![alt](url) 转为 'alt (url)' 格式。", "default": true },
-      "分隔线": { "type": "bool", "description": "分隔线", "hint": "去除独立 --- 分隔线标记，保留段落分隔。", "default": true },
-      "连续换行": { "type": "bool", "description": "连续换行", "hint": "将连续空行压为单个换行。", "default": true },
-      "代码块": { "type": "bool", "description": "代码块", "hint": "去除 ``` 围栏标记，保留代码文本。", "default": false },
+      "加粗": { "type": "bool", "description": "加粗", "hint": "去除加粗标记，保留文本。", "default": true },
+      "斜体": { "type": "bool", "description": "斜体", "hint": "去除斜体标记，保留文本。", "default": true },
+      "删除线": { "type": "bool", "description": "删除线", "hint": "去除删除线标记，保留文本。", "default": true },
+      "行内代码": { "type": "bool", "description": "行内代码", "hint": "去除行内代码标记，保留文本。", "default": true },
+      "链接": { "type": "bool", "description": "链接", "hint": "去除链接标记，保留文本与 url。", "default": true },
+      "标题": { "type": "bool", "description": "标题", "hint": "去除标题标记，保留文本。", "default": true },
+      "列表标记（无序）": { "type": "bool", "description": "无序列表", "hint": "去除无序列表前缀。", "default": true },
+      "列表标记（有序）": { "type": "bool", "description": "有序列表", "hint": "去除有序列表前缀。", "default": true },
+      "引用": { "type": "bool", "description": "引用", "hint": "去除引用前缀。", "default": true },
+      "图片": { "type": "bool", "description": "图片", "hint": "去除图片标记，保留 alt 与 url。", "default": true },
+      "分隔线": { "type": "bool", "description": "分隔线", "hint": "去除独立的分隔线标记，保留段落分隔。", "default": true },
+      "连续换行": { "type": "bool", "description": "连续换行", "hint": "把连续空行压成单个换行。", "default": true },
+      "代码块": { "type": "bool", "description": "代码块", "hint": "去除围栏标记，保留代码文本。", "default": false },
       "表格": { "type": "bool", "description": "表格", "hint": "去除表头分隔行，竖线保留为列分隔符。", "default": false },
-      "表达式": { "type": "bool", "description": "表达式", "hint": "去除 $ 和 $$ 定界符，保留公式文本。", "default": false }
+      "表达式": { "type": "bool", "description": "表达式", "hint": "去除 $ 与 $$ 定界符，保留公式文本。", "default": false }
     }
   }
 }
