@@ -2,6 +2,16 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.5.2] - 2026-10-18
+
+### 变更
+- `skills/show-me` 的 description 改为强制语气：删掉英文触发词清单，改成 `You MUST use this skill whenever…` 的类别式条件，覆盖面按 system / paper / protocol / algorithm / API / data model 列举。
+- 明确「用户用中文提问时，英文描述同样适用」，堵住「描述是英文所以中文请求不算匹配」这条推理；末句把只用散文回答定义为该 skill 的失败。
+- 只改系统提示里那一行路由文本，SKILL.md 正文未变。
+
+### 注意
+- description 里出现 `: ` 会被 YAML 当作映射键，`_parse_frontmatter_description` 静默返回空串，技能描述直接变成 `No description`。这行必须避开冒号，或整体加引号。
+
 ## [1.5.1] - 2026-10-17
 
 ### 变更

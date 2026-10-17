@@ -1,6 +1,6 @@
 ---
 name: show-me
-description: Use when the user wants to understand structure, flow, a change, or a layout, or when the current topic is complex enough that a diagram works better than a paragraph. Pick the smallest view that explains the point (pseudocode, call tree, component tree, file tree, mermaid, diff, single-file HTML). Triggers include 长什么样 / 怎么走 / 改了啥 / 结构如何, and discussions that keep circling.
+description: You MUST use this skill whenever the user asks how something works or how it is built — a system, a paper, a protocol, an algorithm, an API, a data model — and whenever a structure, flow, change or layout is being discussed. This holds for off-hand questions, not only explicit requests for diagrams, and whatever language the user writes in — an English description does not make a Chinese question ineligible. Read this SKILL.md first, then emit the smallest view that makes the point as a fenced block — pseudocode, call tree, component tree, file tree, mermaid, diff, single-file HTML. Answering such a question with prose alone is a failure of this skill.
 ---
 
 Help the user understand the current topic of conversation visually. Skip the preamble and keep prose brief. Pick the smallest view that makes the key point clear.

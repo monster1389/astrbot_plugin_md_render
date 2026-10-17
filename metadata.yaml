@@ -1,7 +1,7 @@
 name: astrbot_plugin_md_render
 display_name: Markdown 渲染
 desc: 无浏览器 Markdown / LaTeX / HTML / Mermaid 转图片；分段；Markdown 清洗；可只处理模型回复
-version: v1.5.1
+version: v1.5.2
 author: monster1389
 repo: "https://github.com/monster1389/astrbot_plugin_md_render"
 support_platforms:
