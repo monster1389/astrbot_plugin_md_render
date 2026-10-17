@@ -106,35 +106,37 @@ def _make_plugin(context: MagicMock):
     plugin.cfg = MagicMock()
     plugin.seg_cfg = MagicMock()
     plugin.clean_cfg = None
+    plugin._log_render_summary = MagicMock()
     return plugin
 
 
-class TestProcessChainWiring:
-    """on_decorating_result 只负责接线：process_chain 与 deliver 两处 seam。"""
+class TestPipelineWiring:
+    """on_decorating_result 只负责接线：plan_chain 与 deliver 两处 seam。"""
 
-    def test_returns_early_when_process_chain_none(self):
-        """process_chain 返回 None → 原样保留，不交付、不发送。"""
+    def test_returns_early_when_plan_chain_none(self):
+        """plan_chain 返回 None → 原样保留，不交付、不发送。"""
         chain = [Plain("**加粗**")]
         event = _make_event(chain)
         event.unified_msg_origin = "napcat:FriendMessage:1"
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch("main.process_chain", AsyncMock(return_value=None)) as mock_pc, \
+        with patch("main.plan_chain", AsyncMock(return_value=None)) as mock_plan, \
                 patch("main.deliver", AsyncMock()) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
             plugin = _make_plugin(context)
             asyncio.run(plugin.on_decorating_result(event))
 
-        assert mock_pc.await_count == 1
+        assert mock_plan.await_count == 1
         mock_deliver.assert_not_awaited()
         context.send_message.assert_not_awaited()
         assert event.get_result.return_value.chain is chain
 
-    def test_delivers_with_process_chain_messages(self):
-        """process_chain 返回消息 → deliver 收尾，result.chain 取其返回。"""
-        messages = [[Plain("前置")], [Plain("尾条")]]
+    def test_delivers_with_pipeline(self):
+        """plan_chain 返回流水线 → deliver 消费，result.chain 取其返回。"""
+        pipeline = MagicMock()
+        pipeline.cancel = MagicMock()
         tail = [Plain("尾条")]
         original_chain = [Plain("原文")]
         event = _make_event(original_chain)
@@ -145,7 +147,7 @@ class TestProcessChainWiring:
         cfg = MagicMock()
         seg_cfg = MagicMock()
 
-        with patch("main.process_chain", AsyncMock(return_value=messages)) as mock_pc, \
+        with patch("main.plan_chain", AsyncMock(return_value=pipeline)) as mock_plan, \
                 patch("main.deliver", AsyncMock(return_value=tail)) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
@@ -154,13 +156,15 @@ class TestProcessChainWiring:
             plugin.seg_cfg = seg_cfg
             asyncio.run(plugin.on_decorating_result(event))
 
-        mock_pc.assert_awaited_once_with(
+        mock_plan.assert_awaited_once_with(
             original_chain, cfg, seg_cfg, None, "/tmp/test_md_render"
         )
         assert mock_deliver.await_count == 1
-        assert mock_deliver.await_args[0][1] is messages
+        assert mock_deliver.await_args[0][1] is pipeline
         assert mock_deliver.await_args[0][2] is seg_cfg
         assert event.get_result.return_value.chain is tail
+        pipeline.cancel.assert_called_once()
+        plugin._log_render_summary.assert_called_once_with(pipeline)
 
     def test_send_callback_routes_to_context(self):
         """deliver 收到的 send 回调经 context.send_message 发送。"""
@@ -169,7 +173,7 @@ class TestProcessChainWiring:
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch("main.process_chain", AsyncMock(return_value=[[Plain("a")]])), \
+        with patch("main.plan_chain", AsyncMock(return_value=MagicMock())), \
                 patch("main.deliver", AsyncMock(return_value=[Plain("a")])) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
@@ -194,14 +198,14 @@ class TestMessageScope:
         model_only: bool,
         chain: list | None = None,
     ):
-        """执行一次事件处理，返回 process_chain 的 mock 与事件本身。"""
+        """执行一次事件处理，返回 plan_chain 的 mock 与事件本身。"""
         chain = chain if chain is not None else [Plain("hi")]
         event = _make_event(chain, content_type=content_type, model=model)
         event.unified_msg_origin = "napcat:FriendMessage:1"
         context = MagicMock()
         context.send_message = AsyncMock()
 
-        with patch("main.process_chain", AsyncMock(return_value=[[Plain("x")]])) as mock_pc, \
+        with patch("main.plan_chain", AsyncMock(return_value=MagicMock())) as mock_plan, \
                 patch("main.deliver", AsyncMock(return_value=[Plain("x")])) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
@@ -209,36 +213,36 @@ class TestMessageScope:
             plugin.cfg.model_only = model_only
             asyncio.run(plugin.on_decorating_result(event))
 
-        return mock_pc, mock_deliver, event, chain
+        return mock_plan, mock_deliver, event, chain
 
     def test_streaming_finish_skipped(self):
         """流式结束通知不渲染：内容已在流式阶段发出。"""
-        mock_pc, mock_deliver, event, chain = self._run(
+        mock_plan, mock_deliver, event, chain = self._run(
             _MockResultContentType.STREAMING_FINISH, model=True, model_only=False
         )
-        mock_pc.assert_not_awaited()
+        mock_plan.assert_not_awaited()
         mock_deliver.assert_not_awaited()
         assert event.get_result.return_value.chain is chain
 
     def test_model_only_skips_non_model_result(self):
         """开启「仅处理模型回复」时，普通消息结果原样放过。"""
-        mock_pc, mock_deliver, event, chain = self._run(
+        mock_plan, mock_deliver, event, chain = self._run(
             _MockResultContentType.GENERAL_RESULT, model=False, model_only=True
         )
-        mock_pc.assert_not_awaited()
+        mock_plan.assert_not_awaited()
         mock_deliver.assert_not_awaited()
         assert event.get_result.return_value.chain is chain
 
     def test_model_only_processes_model_result(self):
         """开启「仅处理模型回复」时，LLM 回复照常渲染。"""
-        mock_pc, _, _, _ = self._run(
+        mock_plan, _, _, _ = self._run(
             _MockResultContentType.LLM_RESULT, model=True, model_only=True
         )
-        assert mock_pc.await_count == 1
+        assert mock_plan.await_count == 1
 
     def test_model_only_off_processes_non_model_result(self):
         """关闭时与旧行为一致：普通消息结果也处理。"""
-        mock_pc, _, _, _ = self._run(
+        mock_plan, _, _, _ = self._run(
             _MockResultContentType.GENERAL_RESULT, model=False, model_only=False
         )
-        assert mock_pc.await_count == 1
+        assert mock_plan.await_count == 1

@@ -16,15 +16,13 @@ from astrbot.api.event import (
     ResultContentType,
     filter,
 )
-from astrbot.api.message_components import File as AstrFile
-from astrbot.api.message_components import Image
 from astrbot.api.star import Context, Star, StarTools, register
 
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
-from render.chain import process_chain  # noqa: E402
+from render.chain import Pipeline, plan_chain  # noqa: E402
 from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
 from render.font import init_font  # noqa: E402
@@ -37,7 +35,7 @@ from render.tempstore import stop as _stop_cleaner  # noqa: E402
     "astrbot_plugin_md_render",
     "monster1389",
     "Markdown 渲染插件",
-    "1.5.0",
+    "1.5.1",
 )
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、HTML 文档、Mermaid 图表、表格、数学表达式渲染为图片。
@@ -82,30 +80,31 @@ class MdRenderPlugin(Star):
             return
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
 
-        messages = await process_chain(
+        pipeline = await plan_chain(
             result.chain, self.cfg, self.seg_cfg, self.clean_cfg, data_dir
         )
-        if messages is None:
+        if pipeline is None:
             return
-
-        self._log_render_summary(messages)
 
         async def _send(comps: list) -> None:
             mc = MessageChain()
             mc.chain = comps
             await self.context.send_message(event.unified_msg_origin, mc)
 
-        result.chain = await deliver(_send, messages, self.seg_cfg)
+        try:
+            result.chain = await deliver(_send, pipeline, self.seg_cfg)
+        finally:
+            pipeline.cancel()
 
-    def _log_render_summary(self, chains: list[list]) -> None:
+        self._log_render_summary(pipeline)
+
+    def _log_render_summary(self, pipeline: Pipeline) -> None:
         """汇总渲染产物数量日志，0 则静默。
 
         Args:
-            chains: 各消息的组件列表。
+            pipeline: 已消费完的渲染流水线。
         """
-        image_count = sum(1 for c in chains for item in c if isinstance(item, Image))
-        file_count = sum(1 for c in chains for item in c if isinstance(item, AstrFile))
-        total = image_count + file_count
+        total = pipeline.image_count + pipeline.file_count
         if total > 0:
             parts: list[str] = []
             if self.cfg.code_mode != "不处理":

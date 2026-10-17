@@ -44,6 +44,19 @@ def _make_clean_cfg(**overrides):
     return CleanConfig(**defaults)
 
 
+def _collect(chain, cfg, seg_cfg, clean_cfg, data_dir="/tmp", renderers=None):
+    """建流水线并收集全部产出消息；plan_chain 返回 None 时同样返回 None。"""
+    from render.chain import plan_chain
+
+    async def _run():
+        pipeline = await plan_chain(chain, cfg, seg_cfg, clean_cfg, data_dir, renderers)
+        if pipeline is None:
+            return None
+        return [message.chain async for message in pipeline]
+
+    return asyncio.run(_run())
+
+
 class TestBuildChain:
     def test_noop_plain_text(self):
         """不处理的 Plain 文本原样传出。"""
@@ -740,59 +753,8 @@ class TestSplitMessages:
         assert result == [[a]]
 
 
-class TestAssembleMessages:
-    def test_plain_groups_kept_whole(self):
-        """keep_whole 组保持单条不拆。"""
-        from render.chain import assemble_messages
-
-        groups = [[Plain("A"), Plain("B")]]
-        result = assemble_messages(groups, [True], [])
-        assert len(result) == 1
-        assert [c.text for c in result[0]] == ["A", "B"]
-
-    def test_inline_group_with_expr_image_kept_whole(self):
-        """keep_whole 组含行内表达式图片时整组一条，图片留在文字原位。"""
-        from render.chain import assemble_messages
-
-        groups = [[Plain("增长率为"), Image.fromBytes(b"x"), Plain("，其余不变")]]
-        result = assemble_messages(groups, [True], [])
-        assert len(result) == 1
-        assert [type(c) for c in result[0]] == [Plain, Image, Plain]
-
-    def test_block_group_split_per_component(self):
-        """keep_whole=False 的块级组逐组件拆条（原文/图各自一条）。"""
-        from render.chain import assemble_messages
-
-        groups = [[Plain("x=1"), Image.fromBytes(b"code")]]
-        result = assemble_messages(groups, [False], [])
-        assert len(result) == 2
-        assert isinstance(result[0][0], Plain) and result[0][0].text == "x=1"
-        assert isinstance(result[1][0], Image)
-
-    def test_non_plain_prepended_to_first(self):
-        """非 Plain 组件前置到首条消息。"""
-        from render.chain import assemble_messages
-
-        non_plain = [Image.fromFileSystem("/tmp/a.png")]
-        groups = [[Plain("文本")]]
-        result = assemble_messages(groups, [True], non_plain)
-        assert len(result) == 1
-        assert isinstance(result[0][0], Image)
-        assert result[0][1].text == "文本"
-
-    def test_multiple_groups_concatenated(self):
-        """多组消息按序拼接。"""
-        from render.chain import assemble_messages
-
-        groups = [[Plain("1")], [Plain("2"), Plain("3")]]
-        result = assemble_messages(groups, [True, True], [])
-        assert len(result) == 2
-        assert [c.text for c in result[0]] == ["1"]
-        assert [c.text for c in result[1]] == ["2", "3"]
-
-
 class TestRenderInjection:
-    """渲染器注入：build_chain/process_chain 接受 renderers 覆盖层，未覆盖走默认配方。"""
+    """渲染器注入：build_chain/plan_chain 接受 renderers 覆盖层，未覆盖走默认配方。"""
 
     def test_renderers_override_spec_render(self):
         """传 renderers 时被覆盖类型走 fake，产物进消息链。"""
@@ -808,17 +770,15 @@ class TestRenderInjection:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    def test_process_chain_passes_renderers(self):
-        """process_chain 透传 renderers 到 build_chain。"""
+    def test_plan_chain_passes_renderers(self):
+        """plan_chain 透传 renderers 到 build_chain。"""
         from unittest.mock import MagicMock
-
-        from render.chain import process_chain
 
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code_mode="渲染图像")
-        result = asyncio.run(process_chain(
+        result = _collect(
             [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, "/tmp", renderers={CodeBlock: fake}
-        ))
+        )
         fake.assert_called_once()
         assert isinstance(result[0][0], Image)
 
@@ -841,14 +801,12 @@ class TestInlineRunMerging:
 
     def test_inline_expr_keeps_own_message(self):
         """「文本 $expr$ 文本」整条合并，行内表达式图片留在文字原位。"""
-        from render.chain import process_chain
-
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = asyncio.run(process_chain(
+        result = _collect(
             [Plain("增长率为 $5\\%$，其余不变")], cfg, seg_cfg, None, "/tmp",
             renderers={InlineExpr: fake},
-        ))
+        )
         assert len(result) == 1
         assert [type(c) for c in result[0]] == [Plain, Image, Plain]
         assert result[0][0].text.strip() == "增长率为"
@@ -856,14 +814,12 @@ class TestInlineRunMerging:
 
     def test_trailing_text_merged(self):
         """表达式后不换行的文字并入同一条。"""
-        from render.chain import process_chain
-
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = asyncio.run(process_chain(
+        result = _collect(
             [Plain("毛利 $a$，增长 $b$，很好")], cfg, seg_cfg, None, "/tmp",
             renderers={InlineExpr: fake},
-        ))
+        )
         assert len(result) == 1
         assert len(result[0]) == 5
         assert isinstance(result[0][1], Image)
@@ -871,14 +827,12 @@ class TestInlineRunMerging:
 
     def test_block_expr_stays_own_message(self):
         """块级表达式不合并，独立一条，前后内联流各自合并。"""
-        from render.chain import process_chain
-
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(expr_mode="渲染图像")
-        result = asyncio.run(process_chain(
+        result = _collect(
             [Plain("公式 $x$ 且 $$y$$ 且 $z$")], cfg, seg_cfg, None, "/tmp",
             renderers={InlineExpr: fake, BlockExpr: fake},
-        ))
+        )
         assert len(result) == 3
         assert [type(c) for c in result[0]] == [Plain, Image, Plain]
         assert isinstance(result[1][0], Image)  # 块级表达式独立一条
@@ -886,15 +840,13 @@ class TestInlineRunMerging:
 
     def test_code_block_splits_inline_run(self):
         """代码块打断内联流：代码块独立一条，前后内联流各自合并。"""
-        from render.chain import process_chain
-
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code_mode="渲染图像", expr_mode="渲染图像")
         md = "注意：$a$ 代码是\n```py\nprint(1)\n```\n末尾 $b$ 了"
-        result = asyncio.run(process_chain(
+        result = _collect(
             [Plain(md)], cfg, seg_cfg, None, "/tmp",
             renderers={CodeBlock: fake, InlineExpr: fake},
-        ))
+        )
         assert len(result) == 3
         assert [type(c) for c in result[0]] == [Plain, Image, Plain]  # 注意：🖼️(a) 代码是
         assert isinstance(result[1][0], Image)  # 代码块图独立一条

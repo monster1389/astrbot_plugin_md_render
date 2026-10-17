@@ -1,6 +1,6 @@
 """送达模块。
 
-按序发送除末条外的所有消息，末条留作 result.chain 原地展示。
+按序消费流水线：除末条外每条就绪即发，末条留作 result.chain 原地展示。
 
 每条发送完成后立即删除其临时文件（文件在发送时已被读走）；
 末条交棒前刷新其临时文件时间戳，保证清理线程不误删尚未发出的文件。
@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import time
 from collections.abc import Awaitable, Callable
 
 from astrbot.api import logger
-from render.chain import has_media
+from render.chain import Pipeline, has_media
 from render.config import SegmentConfig
 from render.tempstore import delete, is_temp_file, touch
 
@@ -89,32 +90,42 @@ def _summarize(comps: list) -> str:
 
 async def deliver(
     send: Callable[[list], Awaitable[None]],
-    messages: list[list],
+    pipeline: Pipeline,
     cfg: SegmentConfig,
 ) -> list:
-    """按序发送除末条外的所有消息，末条留作返回。
+    """按序消费流水线，发送除末条外的所有消息，末条留作返回。
 
-    跳过纯空白消息；send_delay 开启时在两条消息间随机延时，
-    媒体消息间隔 1~3 秒，纯文本间隔 0.3~1 秒。每条发送后打一条 DEBUG
-    摘要日志，延时是否生效可从相邻日志行的时间戳间隔观察。
+    就绪即发，不等后续消息（末条由 is_tail 标记，无需向前多取一条）。
+    跳过纯空白消息；send_delay 开启时，两条消息的间隔按已消耗的时间补足——
+    上一条发出后到本条渲染完成之间的等待已计入间隔，媒体 1~3 秒、纯文本 0.3~1 秒，
+    不足才补，不叠加。每条发送后打一条 DEBUG 摘要日志。
 
     Args:
         send: 发送一条消息的异步回调。
-        messages: build_chain 产出的消息列表。
+        pipeline: plan_chain 产出的流水线。
         cfg: 分段配置。
 
     Returns:
         末条消息组件列表，作为 result.chain 留尾。
     """
-    n = len(messages)
-    for i, message in enumerate(messages[:-1], 1):
-        if not _has_content(message):
+    tail: list = []
+    sent = 0
+    last_sent: float | None = None
+    async for message in pipeline:
+        if message.is_tail:
+            tail = message.chain
             continue
-        await send(message)
-        logger.debug("第 %d/%d 条已发送 %s", i, n, _summarize(message))
-        delete(_temp_paths(message))
-        if cfg.send_delay:
-            await asyncio.sleep(random.uniform(*_DELAY_RANGES[has_media(message)]))
-    tail = messages[-1]
+        if not _has_content(message.chain):
+            continue
+        if cfg.send_delay and last_sent is not None:
+            gap = random.uniform(*_DELAY_RANGES[has_media(message.chain)])
+            remaining = gap - (time.monotonic() - last_sent)
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+        await send(message.chain)
+        last_sent = time.monotonic()
+        sent += 1
+        logger.debug("第 %d 条已发送 %s", sent, _summarize(message.chain))
+        delete(_temp_paths(message.chain))
     touch(_temp_paths(tail))
     return tail

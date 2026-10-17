@@ -1,13 +1,14 @@
 """消息链组装。
 
-build_chain: 异步并发渲染，按配置模式组装消息链。
+plan_chain: 解析、分组并提交全部渲染任务，返回按序产出的流水线。
+build_chain: 异步并发渲染，按配置模式组装单组消息链。
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,6 +39,10 @@ from render.table_render import render_table
 from render.tempstore import build_temp_path
 
 logger = logging.getLogger(__name__)
+
+# 单个元素的渲染保险丝（秒）：只兜住渲染器卡死，正常路径不会触发——
+# mermaid.ink 自己 5s×2 次 + 0.5s 重试延迟 ≈ 10.5s 就会放弃。
+_RENDER_TIMEOUT = 15.0
 
 
 @dataclass(frozen=True)
@@ -250,7 +255,7 @@ async def build_chain(
 ) -> list[Plain | Image | AstrFile]:
     """将解析后的 Segment 列表转换为 AstrBot Component 列表。
 
-    并发提交渲染任务到线程池，全部完成后按原顺序组装。
+    并发提交渲染任务到线程池，全部完成后按原顺序组装；每个元素带渲染超时。
 
     Args:
         segments: parser.parse() 输出的 Segment 列表。
@@ -271,7 +276,10 @@ async def build_chain(
             continue
         if _recipe_for(spec, cfg).image:
             indices.append(i)
-            coros.append(asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg))
+            coros.append(asyncio.wait_for(
+                asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg),
+                _RENDER_TIMEOUT,
+            ))
 
     # 并发执行
     if coros:
@@ -411,44 +419,91 @@ def split_messages(chain: list[Any]) -> list[list[Any]]:
     return [[c] for c in chain]
 
 
-def assemble_messages(
-    built_groups: list[list[Any]],
-    keep_whole: list[bool],
-    non_plain: list[Any],
-) -> list[list[Any]]:
-    """将各组的构建链拼装为待发送消息列表。
+@dataclass(frozen=True)
+class Message:
+    """流水线产出的一条待发送消息。
 
-    keep_whole=True 的组整组合并成一条（行内表达式图片与相邻文字同条）；
-    keep_whole=False 的组逐组件拆成独立消息。原链的非 Plain 组件前置到首条。
-
-    Args:
-        built_groups: build_chain 对各组的结果列表，与 keep_whole 一一对应。
-        keep_whole: 各组的整组合并标记。
-        non_plain: 原始链中的非 Plain 组件，为空则不做前置。
-
-    Returns:
-        待发送消息列表，末条留作 result.chain。
+    Attributes:
+        chain: 该条消息的组件列表。
+        is_tail: 是否末条——末条不由 deliver 发送，留作 result.chain。
     """
-    messages: list[list[Any]] = []
-    for built, keep in zip(built_groups, keep_whole):
-        if keep:
-            messages.append(built)
-        else:
-            messages.extend(split_messages(built))
-    if non_plain:
-        messages[0] = non_plain + messages[0]
-    return messages
+    chain: list[Any]
+    is_tail: bool
 
 
-async def process_chain(
+@dataclass
+class Pipeline:
+    """渲染流水线：渲染任务已全部提交，按序逐条产出待发送消息。
+
+    严格保序：某组渲染慢时，它后面的消息一律等它，不越过。
+
+    Attributes:
+        groups: 分组列表，与 tasks 一一对应。
+        tasks: 各组的 build_chain 任务，plan_chain 中已全部提交。
+        non_plain: 原链非 Plain 组件，前置到首条产出的消息。
+        image_count: 已产出的图片数。
+        file_count: 已产出的文件数。
+    """
+
+    groups: list[SegmentGroup]
+    tasks: list[asyncio.Task]
+    non_plain: list[Any]
+    image_count: int = 0
+    file_count: int = 0
+
+    def __aiter__(self) -> AsyncIterator[Message]:
+        """按序产出消息。"""
+        return self._iterate()
+
+    async def _iterate(self) -> AsyncIterator[Message]:
+        """逐组等待渲染结果，组装为一条或多条消息后产出。
+
+        末条由 is_tail 标记：调用方不必向前多取一条就能知道该留尾。
+
+        Yields:
+            带留尾标记的消息。
+        """
+        prefixed = False
+        last_group = len(self.groups) - 1
+        for index, (group, task) in enumerate(zip(self.groups, self.tasks)):
+            built = await task
+            messages = [built] if group.keep_whole else split_messages(built)
+            if not prefixed:
+                if self.non_plain:
+                    messages[0] = self.non_plain + messages[0]
+                prefixed = True
+            for position, chain in enumerate(messages):
+                self._count(chain)
+                is_tail = index == last_group and position == len(messages) - 1
+                yield Message(chain, is_tail)
+
+    def _count(self, chain: list[Any]) -> None:
+        """累计产物数量，供汇总日志使用。
+
+        Args:
+            chain: 一条消息的组件列表。
+        """
+        for comp in chain:
+            if isinstance(comp, AstrFile):
+                self.file_count += 1
+            elif isinstance(comp, Image):
+                self.image_count += 1
+
+    def cancel(self) -> None:
+        """取消尚未完成的渲染任务。"""
+        for task in self.tasks:
+            task.cancel()
+
+
+async def plan_chain(
     chain: list[Any],
     cfg: RenderConfig,
     seg_cfg: SegmentConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
     renderers: dict[type, Callable] | None = None,
-) -> list[list[Any]] | None:
-    """完整管道：解析、渲染、清洗、切分，产出待发送消息列表。
+) -> Pipeline | None:
+    """解析、分组并提交全部渲染任务，返回可逐条产出的流水线。
 
     空链、纯空白文本、或无需任何处理（无元素、无需清洗、无需切分）
     时返回 None，调用方原样保留消息链。
@@ -462,7 +517,7 @@ async def process_chain(
         renderers: 渲染器覆盖层，透传给 build_chain。
 
     Returns:
-        待发送消息列表，末条留作 result.chain；无事可做时返回 None。
+        待消费的渲染流水线；无事可做时返回 None。
     """
     if not chain:
         return None
@@ -488,8 +543,9 @@ async def process_chain(
     groups = group_segments(segments, seg_cfg)
     non_plain = [c for c in chain if not _is_plain(c)]
 
-    built_groups = list(await asyncio.gather(
-        *(build_chain(g.segments, cfg, clean_cfg, data_dir, renderers) for g in groups)
-    ))
-
-    return assemble_messages(built_groups, [g.keep_whole for g in groups], non_plain)
+    # 立刻提交全部渲染任务：并发度与整批渲染时一致，慢的组不挡住别的组开工
+    tasks = [
+        asyncio.create_task(build_chain(g.segments, cfg, clean_cfg, data_dir, renderers))
+        for g in groups
+    ]
+    return Pipeline(groups, tasks, non_plain)

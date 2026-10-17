@@ -68,7 +68,7 @@ LLM/Star 生成消息
 OnDecoratingResultEvent (priority=1000)  ← 本插件
     │  收集所有 Plain 文本，拼接后解析为 Segment 列表
     │  按配置模式将各 Segment 渲染为 Image(png) / File(.md) / Plain
-    │  组装为新 chain，通过 result.chain = built 整链替换
+    │  流水线逐条产出：除末条外就绪即发，末条经 result.chain 留尾
     │
     ▼
 RespondStage 发送最终 chain
@@ -159,7 +159,7 @@ flowchart LR
 | `render/expr_render.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
 | `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
 | `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，5s 超时 + 5xx 重试一次，失败抛给上层回退 |
-| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条/装配 + async 并发组装 + `process_chain` 管线 |
+| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（含 15s 单元素渲染超时） |
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
 | `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫 |
