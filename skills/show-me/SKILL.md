@@ -1,11 +1,11 @@
 ---
 name: show-me
-description: 当用户想看懂结构、流程、改动或布局，或当前话题复杂到一段文字讲不如一张图时使用。挑最小的视图解释：伪代码、调用树、组件树、文件树、mermaid、diff、单文件 HTML。触发场景：用户问「长什么样 / 怎么走 / 改了啥 / 结构如何」，或讨论绕来绕去需要对齐时。
+description: Use when the user wants to understand structure, flow, a change, or a layout, or when the current topic is complex enough that a diagram works better than a paragraph. Pick the smallest view that explains the point (pseudocode, call tree, component tree, file tree, mermaid, diff, single-file HTML). Triggers include 长什么样 / 怎么走 / 改了啥 / 结构如何, and discussions that keep circling.
 ---
 
 Help the user understand the current topic of conversation visually. Skip the preamble and keep prose brief. Pick the smallest view that makes the key point clear.
 
-**输出约定**：这段对话跑在 AstrBot 上，`astrbot_plugin_md_render` 会把围栏代码块渲染成图片、把 `mermaid` 渲染成图表、把完整 HTML 文档渲染成网页图。所以直接输出围栏块即可——不要自己调外部渲染服务，也不要写 HTML 文件让用户打开。
+**Output conventions**: this conversation runs on AstrBot, and `astrbot_plugin_md_render` renders fenced code blocks as images, `mermaid` as diagrams, and full HTML documents as page screenshots. So emit the fenced block directly — never call an external rendering service, and never write an HTML file for the user to open.
 
 - Show logic or an algorithm as pseudocode:
 
@@ -116,7 +116,7 @@ function expandSkill(command: string): string {
 }
 ```
 
-- For a visual UI, layout, state comparison, or concept too dense for Mermaid, output one focused HTML document directly as a ` ```html ` fenced block — a diagram, an infographic, or a short slide deck, whichever fits the point. Match the product's colors, type, spacing, and components; use real labels and data. 单栏、按约 1000 px 宽设计，样式写在一个 `<style>` 块里。必须是完整文档（含 `<!DOCTYPE html>`），HTML 片段会被当成普通代码块。
+- For a visual UI, layout, state comparison, or concept too dense for Mermaid, output one focused HTML document directly as a ` ```html ` fenced block — a diagram, an infographic, or a short slide deck, whichever fits the point. Match the product's colors, type, spacing, and components; use real labels and data. Single column, designed at roughly 1000 px wide, styles in one `<style>` block. It must be a complete document (including `<!DOCTYPE html>`); HTML fragments are treated as an ordinary code block.
 
 ### guidance
 

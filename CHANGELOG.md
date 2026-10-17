@@ -2,6 +2,20 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.5.0] - 2026-10-17
+
+### 新增
+- 根级配置「仅处理模型回复」（默认关）：开启后只处理 LLM / Agent 回复（`result.is_model_result()`），其它插件与内置命令的普通消息原样放过。
+
+### 变更
+- **字体不再依赖手动安装**：`render/font.py` 的发现结果由路径升级为 `FontSpec(path, index)`，按「`data_dir/fonts/SarasaMonoSC-Regular.ttf` → 系统 Noto Sans Mono CJK SC（`NotoSansCJK-Regular.ttc` 第 7 个 face，AstrBot 官方镜像自带）→ 文泉驿等宽（第 1 个 face）→ DejaVu Sans Mono」取第一个存在的。ttc 必须指定 face：第 0 个是比例字体，直接按路径取会让代码列对齐歪掉。
+- 代码块渲染改用 `ImageFormatter` 子类注入 face index（`_FaceFormatter` / `_FaceFontManager`），不新增依赖。
+- README：手动安装 Sarasa 由「必读」降为「可选、观感更佳」，补字体发现顺序表；配置章节补根级开关；补流式输出相关说明。
+- `skills/show-me/SKILL.md` 说明改为全英文，frontmatter 描述保留中文触发词。
+
+### 修复
+- 流式输出开启且平台不支持流式（默认策略「实时分段回复」）时，跳过 `STREAMING_FINISH` 结果。此前该结果仍会触发渲染并经 `deliver` 把非末条消息再次发出，造成内容重复，而末条又被 RespondStage 丢弃。
+
 ## [1.4.0] - 2026-10-17
 
 ### 新增

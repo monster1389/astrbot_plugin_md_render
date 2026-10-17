@@ -144,7 +144,7 @@ flowchart LR
 
 配置与基础设施各自独立成模块：
 - `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造
-- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_path()` / `get_font(size)`，发现 `data_dir/fonts/SarasaMonoSC-Regular.ttf`（手动放置，不自动下载）并回退系统字体，按字号缓存
+- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_spec()` / `get_font(size)`，返回 `FontSpec(path, index)`；候选顺序 `data_dir/fonts/SarasaMonoSC-Regular.ttf`（手动放置，不自动下载）→ 系统 Noto Sans Mono CJK SC（`NotoSansCJK-Regular.ttc` 第 7 个 face）→ 文泉驿等宽（第 1 个 face）→ DejaVu Sans Mono，按字号缓存。ttc 必须带 face，第 0 个是比例字体
 - `render/tempstore.py` — 临时文件命名 `build_temp_path(data_dir, prefix, ext)` / 删除 / 刷新 + 后台按 TTL 清扫
 
 ### 模块
@@ -163,7 +163,7 @@ flowchart LR
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
 | `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫 |
-| `render/font.py` | 字体发现 + 按字号缓存 |
+| `render/font.py` | 字体发现（`FontSpec` 含 ttc face index）+ 按字号缓存 |
 | `render/config.py` | `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + 配置加载 |
 
 ### 关键 API
@@ -180,7 +180,10 @@ flowchart LR
 
 ### 配置
 
-通过 AstrBot 内置配置系统，`_conf_schema.json` 提供三个嵌套配置块，`load_config` 按 `raw["渲染"]` / `raw["分段"]` / `raw["清洗"]` 构造：
+通过 AstrBot 内置配置系统，`_conf_schema.json` 提供一个根级开关和三个嵌套配置块，`load_config` 按 `raw["仅处理模型回复"]` / `raw["渲染"]` / `raw["分段"]` / `raw["清洗"]` 构造：
+
+**根级**：
+- 仅处理模型回复：默认关。开启后 `on_decorating_result` 只在 `result.is_model_result()` 时处理，其它插件与内置命令的消息原样放过。无论开关如何，`STREAMING_FINISH` 结果一律跳过：流式阶段已把原文发出，RespondStage 不会再发这条结果，继续渲染会让 `deliver` 重复发送前几条
 
 **渲染**（`raw["渲染"]`）：
 - 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染且md文件）

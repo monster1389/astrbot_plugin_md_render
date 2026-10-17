@@ -8,13 +8,24 @@
 |--------|------------------|-----------|-----------|
 | ![code](docs/demo/code.png) | ![table](docs/demo/table.png) | ![inline](docs/demo/inline_expr.png) | ![block](docs/demo/block_expr.png) |
 
-> **注意**：关闭 AstrBot「配置文件 -> 扩展功能 -> 启用分段回复」，否则官方会再次拆分本插件已分段的消息。
+> **注意**：
+> - 关闭 AstrBot「配置文件 -> 扩展功能 -> 启用分段回复」，否则官方会再次拆分本插件已分段的消息。
+> - 若开启了「流式输出」，请把「不支持流式回复的平台」设为「关闭流式回复」。选默认的「实时分段回复」时，原文已按标点拆成多条纯文本先行发完，插件不会再渲染这些内容。
 
-## ⚠️ 手动安装中文字体（必读）
+## 字体
 
-插件已移除「启动时自动下载并解压字体」的逻辑，需要手动把中文字体放进插件数据目录。未安装时图片中的中文会退化为系统字体；系统也无中文字体时显示为方块（豆腐块）。
+不需要手动安装：插件按顺序自动发现可用字体，优先等宽且含中文的。
 
-**强烈建议 [更纱等宽黑体（Sarasa Mono SC）](https://github.com/be5invis/Sarasa-Gothic)**：中英文严格 2:1 等宽，代码块对齐效果最佳。以下命令在 AstrBot 所在机器执行，**完成后重启 AstrBot 生效**：
+| 顺序 | 字体 | 来源 |
+|------|------|------|
+| 1 | 手动放置的字体 | `<数据目录>/plugin_data/astrbot_plugin_md_render/fonts/SarasaMonoSC-Regular.ttf` |
+| 2 | Noto Sans Mono CJK SC | 系统 `NotoSansCJK-Regular.ttc` 的第 7 个 face（AstrBot 官方镜像自带 `fonts-noto-cjk`） |
+| 3 | WenQuanYi Micro Hei Mono | 系统 `wqy-microhei.ttc` 的第 1 个 face（部分镜像自带） |
+| 4 | DejaVu Sans Mono | 无中文字形，仅作保底（中文显示为豆腐块） |
+
+ttc 集合必须指定 face：第 0 个 face 是比例字体，按路径直接取会让代码列对齐歪掉。
+
+想要更好的代码观感，可以手动放 [更纱等宽黑体（Sarasa Mono SC）](https://github.com/be5invis/Sarasa-Gothic)：中英文严格 2:1 等宽，优先于系统字体。以下命令在 AstrBot 所在机器执行，**完成后重启 AstrBot 生效**：
 
 ```bash
 # 1) 下载压缩包（约 68MB；GitHub 直连不稳时默认走镜像，失败换注释里的直连）
@@ -34,13 +45,19 @@ mv SarasaMonoSC-Regular.ttf "$FONT_DIR/"
 docker restart astrbot
 ```
 
-也可以使用任意其它中文字体：将 `.ttf` 重命名为 `SarasaMonoSC-Regular.ttf` 放入上述目录即可。
+任意其它中文字体也可以：重命名为 `SarasaMonoSC-Regular.ttf` 放入该目录即可。插件不会在运行时下载或解压任何字体。
 
-HTML 文档渲染走另一条字体路径：优先系统自带的 `Noto Sans CJK SC`，没有则用文泉驿，两者都缺时才回退到上面的字体——所以部署机带了 Noto 就不需要额外放字体（代码块/表格/公式仍用上面的字体）。
+HTML 文档渲染走另一条字体路径：优先系统自带的 `Noto Sans CJK SC`（按字体名注册），没有则用文泉驿，两者都缺时才回退到上表第 1 项。
 
 ## 配置
 
-配置分三大块，与 AstrBot 配置面板一致。
+配置面板最上层是一个独立开关，其余分三大块，与 AstrBot 配置面板一致。
+
+### 根级
+
+| 配置项 | 默认 | 说明 |
+|--------|------|------|
+| 仅处理模型回复 | 关 | 开启后只渲染 LLM / Agent 回复；其它插件与内置命令的普通消息原样放过 |
 
 ### 渲染
 
