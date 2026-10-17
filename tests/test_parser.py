@@ -3,7 +3,9 @@ from render.parser import (
     BlockExpr,
     CodeBlock,
     Divider,
+    HtmlDoc,
     InlineExpr,
+    MermaidBlock,
     Segment,
     codeblock_to_markdown,
     codeblock_to_plain,
@@ -224,6 +226,39 @@ class TestBlankLineSplit:
         assert not any(isinstance(s, Divider) for s in segments)
         plain = "".join(s.text for s in segments if isinstance(s, Segment))
         assert "---" in plain
+
+
+class TestFenceClassification:
+    """围栏语言与内容分型：HTML 文档 / Mermaid / 普通代码块。"""
+
+    def test_html_doc(self):
+        """含 <!DOCTYPE 的 html 围栏识别为 HTML 文档。"""
+        text = "```html\n<!DOCTYPE html>\n<html><body>x</body></html>\n```"
+        segments = parse(text)
+        assert isinstance(segments[0], HtmlDoc)
+        assert segments[0].lang == "html"
+
+    def test_html_doc_without_doctype(self):
+        """含 <html> 标签同样识别为文档。"""
+        text = "```html\n<html><body>x</body></html>\n```"
+        assert isinstance(parse(text)[0], HtmlDoc)
+
+    def test_html_fragment_is_code_block(self):
+        """HTML 片段仍是普通代码块，不渲染成网页图。"""
+        text = "```html\n<div>hi</div>\n```"
+        assert isinstance(parse(text)[0], CodeBlock)
+
+    def test_mermaid(self):
+        """mermaid 围栏识别为图表。"""
+        text = "```mermaid\nsequenceDiagram\n  A->>B: hi\n```"
+        segments = parse(text)
+        assert isinstance(segments[0], MermaidBlock)
+        assert segments[0].lang == "mermaid"
+
+    def test_mermaid_uppercase(self):
+        """语言标注大小写不敏感。"""
+        text = "```Mermaid\ngraph LR\n  A-->B\n```"
+        assert isinstance(parse(text)[0], MermaidBlock)
 
 
 class TestBlockMathInFence:

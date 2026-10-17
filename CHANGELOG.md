@@ -2,6 +2,21 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.4.0] - 2026-10-17
+
+### 新增
+- **HTML 文档渲染**：` ```html ` 围栏且含 `<!DOCTYPE`/`<html>` 时，用 pytakumi（Rust 布局引擎，无浏览器）渲染为 PNG；抽取 `<style>` 经 `stylesheets` 传入，注册 Noto Sans CJK / 文泉驿 / 插件字体。新增配置「HTML」与「HTML 宽度」（默认 1000）。
+- **Mermaid 图表渲染**：` ```mermaid ` 经 mermaid.ink 渲染为暗底 PNG（`bgColor=1E1E1E`），5 秒超时、5xx 重试一次，失败回退源码文本。配置对齐代码/表格的五种模式，`仅md文件` 交给 QQ 原生渲染。新增配置「Mermaid」，需联网（仅图片模式）。
+- **插件内置技能**：`skills/show-me/SKILL.md`，改写为可被模型主动触发，第 7 种表达改为输出 ` ```html ` 文档而非写文件。
+
+### 修复
+- 未知语言的代码块不再 `guess_lexer`（会把 mermaid 认成 ECLLexer、调用树认成 ScdocLexer），改为 TextLexer 纯文本渲染。
+- `渲染且md文件` 模式下图渲染失败时，不再连 `.md` 一起丢掉：仍写文件，不回退原文。
+- 临时文件命名白名单补上 `html`/`mermaid` 前缀，否则新渲染器产出的文件不会被发送后删除，也不会被 TTL 清扫。
+
+### 其他
+- 依赖新增 `pytakumi>=0.1.5`；README/CLAUDE/架构图同步。
+
 ## [1.3.7] - 2026-09-07
 
 ### 其他

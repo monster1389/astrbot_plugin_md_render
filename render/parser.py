@@ -1,4 +1,4 @@
-"""Markdown 解析器 —— 使用 markdown-it-py 提取代码块/表格/表达式/分隔线。"""
+"""Markdown 解析器 —— 使用 markdown-it-py 提取代码块/HTML 文档/图表/表格/表达式/分隔线。"""
 from __future__ import annotations
 
 import logging
@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 _MATH_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
 _MATH_PLACEHOLDER_PREFIX = "\x01MATHBLOCK"
 _MATH_PLACEHOLDER_RE = re.compile(r"\x01MATHBLOCK(\d+)\x01")
+
+# 判定 ```html 是否是完整文档：避免把讨论 HTML 片段的代码块渲染成图
+_HTML_DOC_RE = re.compile(r"<!doctype|<html[\s>]", re.IGNORECASE)
 
 # 匹配纯分隔线行：至少 3 个 - / * / _，允许空格穿插
 _HR_LINE_RE = re.compile(
@@ -50,7 +53,21 @@ class CodeBlock:
     code: str
 
 
-def codeblock_to_markdown(cb: CodeBlock) -> str:
+@dataclass
+class HtmlDoc:
+    """完整 HTML 文档：```html 且含 <!DOCTYPE 或 <html>。"""
+    code: str
+    lang: str = "html"
+
+
+@dataclass
+class MermaidBlock:
+    """Mermaid 图表源码。"""
+    code: str
+    lang: str = "mermaid"
+
+
+def codeblock_to_markdown(cb: CodeBlock | HtmlDoc | MermaidBlock) -> str:
     """将代码块还原为 markdown 围栏原文。
 
     Args:
@@ -62,7 +79,7 @@ def codeblock_to_markdown(cb: CodeBlock) -> str:
     return f"```{cb.lang}\n{cb.code}\n```"
 
 
-def codeblock_to_plain(cb: CodeBlock) -> str:
+def codeblock_to_plain(cb: CodeBlock | HtmlDoc | MermaidBlock) -> str:
     """将代码块还原为精简纯文本：仅代码。
 
     Args:
@@ -207,10 +224,31 @@ def _restore_block_math(text: str, block_math: dict[int, str]) -> str:
     return _MATH_PLACEHOLDER_RE.sub(_replace, text)
 
 
+def _classify_fence(info: str, code: str) -> CodeBlock | HtmlDoc | MermaidBlock:
+    """按围栏语言与内容分型。
+
+    只有完整 HTML 文档才走 HTML 渲染；HTML 片段仍是普通代码块，
+    否则「讨论 HTML 语法」的代码块会被渲染成一张网页图。
+
+    Args:
+        info: 围栏语言标注原文。
+        code: 围栏内代码。
+
+    Returns:
+        普通代码块、HTML 文档或 Mermaid 图表。
+    """
+    lang = info.split()[0].lower() if info else ""
+    if lang in ("html", "htm") and _HTML_DOC_RE.search(code):
+        return HtmlDoc(code=code)
+    if lang == "mermaid":
+        return MermaidBlock(code=code)
+    return CodeBlock(lang=info, code=code)
+
+
 def _split_hr_from_segments(
-    segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider],
+    segments: list[Segment | CodeBlock | HtmlDoc | MermaidBlock | Table | InlineExpr | BlockExpr | Divider],
     split_blank_lines: bool = False,
-) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
+) -> list[Segment | CodeBlock | HtmlDoc | MermaidBlock | Table | InlineExpr | BlockExpr | Divider]:
     """后处理：从 Segment 文本中识别有空行包裹的分隔线，拆分为 Divider。
 
     仅当 --- / *** / ___ 前后有空行（\\n\\n）时才视为分隔线，
@@ -342,7 +380,7 @@ def extract_inline_content(
     return result
 
 
-def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider]:
+def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBlock | HtmlDoc | MermaidBlock | Table | InlineExpr | BlockExpr | Divider]:
     """解析 markdown 文本，提取结构元素。
 
     Args:
@@ -358,7 +396,7 @@ def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBloc
     md = MarkdownIt("zero").enable(["table", "strikethrough", "fence", "emphasis", "backticks", "link"])
     md.options["html"] = False
     tokens: list[Token] = md.parse(processed_text)
-    segments: list[Segment | CodeBlock | Table | InlineExpr | BlockExpr | Divider] = []
+    segments: list[Segment | CodeBlock | HtmlDoc | MermaidBlock | Table | InlineExpr | BlockExpr | Divider] = []
     text_buf: list[str] = []
 
     def flush_buf() -> None:
@@ -374,8 +412,8 @@ def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBloc
 
         if t.type == "fence":
             flush_buf()
-            lang = t.info.strip() if t.info else ""
-            segments.append(CodeBlock(lang=lang, code=t.content.rstrip("\n")))
+            info = t.info.strip() if t.info else ""
+            segments.append(_classify_fence(info, t.content.rstrip("\n")))
             i += 1
             continue
 

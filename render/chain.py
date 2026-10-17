@@ -16,12 +16,16 @@ from astrbot.api.message_components import Image, Plain
 from render.code_render import render_code
 from render.config import CleanConfig, RenderConfig, SegmentConfig
 from render.expr_render import render_expr
+from render.html_render import render_html
 from render.md_cleaner import clean_markdown
+from render.mermaid_render import render_mermaid
 from render.parser import (
     BlockExpr,
     CodeBlock,
     Divider,
+    HtmlDoc,
     InlineExpr,
+    MermaidBlock,
     Segment,
     codeblock_to_markdown,
     codeblock_to_plain,
@@ -96,6 +100,19 @@ _ELEMENT_SPECS: dict[type, ElementSpec] = {
         prefix="table",
         supports_file=True,
         mode_key="table_mode",
+    ),
+    HtmlDoc: ElementSpec(
+        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
+        render=render_html,
+        prefix="html",
+        mode_key="html_mode",
+    ),
+    MermaidBlock: ElementSpec(
+        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
+        render=render_mermaid,
+        prefix="mermaid",
+        supports_file=True,
+        mode_key="mermaid_mode",
     ),
     InlineExpr: ElementSpec(
         text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
@@ -208,9 +225,12 @@ def _dispatch(
     spec = _ELEMENT_SPECS[type(seg)]
     recipe = _recipe_for(spec, cfg)
 
-    # 渲染失败统一回退为原文
+    # 渲染失败：能出文件的模式仍写 .md（文件本就是渲染不出来时的保底形态），否则回退原文
     if recipe.image and result is None:
-        chain.append(Plain(spec.text(seg, clean_cfg)))
+        if recipe.file and spec.supports_file and spec.prefix:
+            _append_file(chain, spec.text(seg, None), spec.prefix, data_dir)
+        else:
+            chain.append(Plain(spec.text(seg, clean_cfg)))
         return
 
     if recipe.text:
@@ -263,7 +283,7 @@ async def build_chain(
     results: dict[int, object] = {}
     for i, result in zip(indices, results_list):
         if isinstance(result, BaseException):
-            logger.warning("渲染失败，回退为原文", exc_info=result)
+            logger.warning("渲染失败，改用降级产物", exc_info=result)
             results[i] = None
         else:
             results[i] = result
@@ -290,9 +310,9 @@ def _is_plain(comp: Any) -> bool:
     )
 
 
-# 块级元素：代码块、表格、块级表达式。自身独立成组，前后的纯文本与行内
-# 表达式各并成一组（keep_whole）。
-_BLOCK_TYPES: tuple[type, ...] = (CodeBlock, Table, BlockExpr)
+# 块级元素：代码块、HTML 文档、Mermaid 图表、表格、块级表达式。自身独立成组，
+# 前后的纯文本与行内表达式各并成一组（keep_whole）。
+_BLOCK_TYPES: tuple[type, ...] = (CodeBlock, Table, BlockExpr, HtmlDoc, MermaidBlock)
 
 
 @dataclass(frozen=True)
@@ -317,7 +337,7 @@ def group_segments(
     切分点有三类：
       - 分隔线（分隔线=切分）：`---` 作为断点，本身不进入消息。
       - 空行（连续换行=切分）：相邻纯文本段之间断开。
-      - 块级元素（代码块/表格/块级表达式）：自身独立一组，前后的纯文本
+      - 块级元素（代码块/表格/块级表达式/HTML 文档/Mermaid 图表）：自身独立一组，前后的纯文本
         与行内表达式各并成一组。
 
     keep_whole=True 的组（纯文本段 + 行内表达式）整组合并成一条消息，

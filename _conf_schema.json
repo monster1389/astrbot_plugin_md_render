@@ -25,6 +25,26 @@
         "options": ["不处理", "渲染图像", "渲染且保留原文"],
         "default": "渲染图像"
       },
+      "Mermaid": {
+        "type": "string",
+        "description": "Mermaid 图表",
+        "hint": "将 ```mermaid 图表渲染为图片或 .md 文件。图片走 mermaid.ink 外部服务，需联网；md 文件由 QQ 原生渲染。",
+        "options": ["不处理", "渲染图像", "渲染且保留原文", "渲染且md文件", "仅md文件"],
+        "default": "渲染图像"
+      },
+      "HTML": {
+        "type": "string",
+        "description": "HTML 文档",
+        "hint": "将完整的 ```html 文档（含 <!DOCTYPE 或 <html>）渲染为图片。无浏览器，支持常用 CSS；HTML 片段仍按代码块处理。",
+        "options": ["不处理", "渲染图像", "渲染且保留原文"],
+        "default": "渲染图像"
+      },
+      "HTML 宽度": {
+        "type": "int",
+        "description": "HTML 宽度",
+        "hint": "HTML 文档渲染宽度（像素），高度按内容自适应。",
+        "default": 1000
+      },
       "临时文件存活": {
         "type": "int",
         "description": "临时文件存活",

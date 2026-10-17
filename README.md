@@ -1,6 +1,6 @@
 # Markdown 渲染插件
 
-把 QQ 消息中的 Markdown **代码块**、**表格**、**数学表达式**渲染为图片，让机器人回复不再满屏源码。表格支持格内 **加粗**、*斜体*、~~删除线~~、`代码`、[链接](url) 等行内格式。
+把 QQ 消息中的 Markdown **代码块**、**表格**、**数学表达式**、**HTML 文档**、**Mermaid 图表**渲染为图片，让机器人回复不再满屏源码。表格支持格内 **加粗**、*斜体*、~~删除线~~、`代码`、[链接](url) 等行内格式。
 
 ## 效果展示
 
@@ -36,6 +36,8 @@ docker restart astrbot
 
 也可以使用任意其它中文字体：将 `.ttf` 重命名为 `SarasaMonoSC-Regular.ttf` 放入上述目录即可。
 
+HTML 文档渲染走另一条字体路径：优先系统自带的 `Noto Sans CJK SC`，没有则用文泉驿，两者都缺时才回退到上面的字体——所以部署机带了 Noto 就不需要额外放字体（代码块/表格/公式仍用上面的字体）。
+
 ## 配置
 
 配置分三大块，与 AstrBot 配置面板一致。
@@ -47,6 +49,9 @@ docker restart astrbot
 | 代码块 | 不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件 | 渲染且md文件 |
 | 表格 | 不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件 | 渲染图像 |
 | 表达式 | 不处理 / 渲染图像 / 渲染且保留原文 | 渲染图像 |
+| Mermaid | 不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件 | 渲染图像 |
+| HTML | 不处理 / 渲染图像 / 渲染且保留原文 | 渲染图像 |
+| HTML 宽度 | 整数（像素） | 1000 |
 | 临时文件存活 | 整数（分钟） | 3 |
 
 ### 分段
@@ -81,10 +86,14 @@ docker restart astrbot
 
 - 渲染里的 `仅md文件`：只发 .md 文件，不渲染图片。
 - 表达式支持 `$...$` 行内和 `$$...$$` 块级。
+- Mermaid 走 [mermaid.ink](https://mermaid.ink) 外部服务，**需要联网**；超时（5 秒）或服务端 5xx 时重试一次，仍失败则回退为源码文本。图的源码会发送给该服务。md 文件模式不走该服务：QQ 客户端能原生渲染 md 里的 mermaid/表格/公式/代码块，`仅md文件` 是零外网、零依赖的路线。
+- HTML 只处理**完整文档**（含 `<!DOCTYPE` 或 `<html>`）；HTML 片段仍按普通代码块渲染，避免把「讨论 HTML 语法」变成一张网页图。渲染不走浏览器，为 pytakumi（Rust 布局引擎），支持常用 CSS（flex/grid/表格/圆角），不执行 JS、不加载外链图片。
+- 图渲染失败但配置了 md 文件（`渲染且md文件`）时，仍会产出 `.md`，不会静默丢文件。
+- HTML 宽度：仅影响 HTML 文档渲染，高度按内容自适应。
 - 临时文件存活：分钟；`0`=发送完成后立即删除，`-1`=永久保留。
 - 发送延时：切分后多条消息间随机延时防风控，图片/文件间 1~3 秒，纯文本间 0.3~1 秒。
 - 清洗里的「分隔线」「连续换行」与分段的同名项不同：这里指清洗文本中的 `---` 标记、把连续空行压为单个换行。
-- 清洗开关分两组：以上前 12 项默认开，作用于渲染后剩余的纯文本；**代码块 / 表格 / 表达式**默认关，只在以文本形式保留元素时生效（见下）。
+- 清洗开关分两组：以上前 12 项默认开，作用于渲染后剩余的纯文本；**代码块 / 表格 / 表达式**默认关，只在以文本形式保留元素时生效（见下）。HTML 文档与 Mermaid 图表以文本保留时，沿用「代码块」开关。
 
 #### 格式标记清洗效果
 
@@ -115,10 +124,10 @@ docker restart astrbot
 
 ## 发送切分
 
-含代码块/表格/表达式渲染的消息按下述规则拆分发送，保持阅读顺序：
+含代码块/表格/表达式/HTML/Mermaid 渲染的消息按下述规则拆分发送，保持阅读顺序：
 
 - **行内表达式**（`$...$`）与相邻文字合成一条消息，表达式图片插在文字原位，不单独成条。
-- **代码块 / 表格 / 块级表达式**（`$$...$$`）各自独立成条；「渲染且保留原文」下原文与图片分两条发送，互不粘连。
+- **代码块 / 表格 / 块级表达式**（`$$...$$`）/ **HTML 文档** / **Mermaid 图表** 各自独立成条；「渲染且保留原文」下原文与图片分两条发送，互不粘连。
 - 内联流被块级元素打断时，块级元素前后的文字段各自携带行内表达式合并成条。
 - 空行、分隔线切分照旧生效。纯文本消息保持单条不拆。
 
@@ -146,6 +155,8 @@ flowchart LR
     code_r["code_render.py"]
     table_r["table_render.py"]
     expr_r["expr_render.py"]
+    html_r["html_render.py<br/>pytakumi"]
+    mmd_r["mermaid_render.py<br/>mermaid.ink"]
   end
   subgraph 基础设施
     font["font.py<br/>字体服务"]
@@ -162,7 +173,9 @@ flowchart LR
   chain --> code_r
   chain --> cfg
   chain --> expr_r
+  chain --> html_r
   chain --> mdc
+  chain --> mmd_r
   chain --> parser
   chain --> tdom
   chain --> table_r
@@ -182,7 +195,7 @@ flowchart LR
   classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
   classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
   class main,chain deep;
-  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,deliv mid;
+  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv mid;
   class font,cfg,ts leaf;
 ```
 

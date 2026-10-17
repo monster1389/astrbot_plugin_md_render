@@ -83,6 +83,8 @@ class TestIsTempFile:
         assert is_temp_file("code_20260624_114940_123456.png")
         assert is_temp_file("table_20260624_114940_123456.md")
         assert is_temp_file("expr_20260624_114940_123456.png")
+        assert is_temp_file("html_20260624_114940_123456.png")
+        assert is_temp_file("mermaid_20260624_114940_123456.md")
 
     def test_matches_basename_of_full_path(self):
         assert is_temp_file("/data/temp/code_20260624_114940_123456.png")

@@ -17,6 +17,9 @@ class TestLoadConfig:
         assert render_cfg.table_mode == "渲染图像"
         assert render_cfg.expr_mode == "渲染图像"
         assert render_cfg.temp_ttl == 3
+        assert render_cfg.html_mode == "渲染图像"
+        assert render_cfg.mermaid_mode == "渲染图像"
+        assert render_cfg.html_width == 1000
         assert seg_cfg.divider_mode == "切分"
         assert seg_cfg.blank_line_mode == "切分"
         assert seg_cfg.send_delay is True
@@ -40,6 +43,9 @@ class TestLoadConfig:
                 "代码块": "渲染图像",
                 "表格": "渲染且保留原文",
                 "表达式": "渲染图像",
+                "HTML": "渲染且保留原文",
+                "Mermaid": "不处理",
+                "HTML 宽度": 800,
                 "临时文件存活": 10,
             },
             "分段": {
@@ -57,6 +63,9 @@ class TestLoadConfig:
         assert render_cfg.table_mode == "渲染且保留原文"
         assert render_cfg.expr_mode == "渲染图像"
         assert render_cfg.temp_ttl == 10
+        assert render_cfg.html_mode == "渲染且保留原文"
+        assert render_cfg.mermaid_mode == "不处理"
+        assert render_cfg.html_width == 800
         assert seg_cfg.divider_mode == "不处理"
         assert seg_cfg.blank_line_mode == "切分"
         assert seg_cfg.send_delay is False

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
-from render.parser import BlockExpr, CodeBlock, Divider, InlineExpr, Segment
+from render.parser import BlockExpr, CodeBlock, Divider, HtmlDoc, InlineExpr, MermaidBlock, Segment
 from render.table_domain import RichCell, Span, Table
 from render.config import RenderConfig, SegmentConfig, CleanConfig
 
@@ -77,6 +77,109 @@ class TestBuildChain:
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
         assert len(result) == 1
         assert isinstance(result[0], Image)
+
+    def test_html_render_image(self):
+        """HTML 文档渲染图像模式。"""
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png_data")
+        cfg = _make_cfg(html_mode="渲染图像")
+        result = asyncio.run(
+            build_chain([HtmlDoc(code="<html></html>")], cfg, None, "/tmp", renderers={HtmlDoc: fake})
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
+
+    def test_html_noop_keeps_fence(self):
+        """HTML 文档不处理：还原为 ```html 围栏原文。"""
+        from render.chain import build_chain
+
+        cfg = _make_cfg(html_mode="不处理")
+        result = asyncio.run(build_chain([HtmlDoc(code="<html></html>")], cfg, None, "/tmp"))
+        assert len(result) == 1
+        assert isinstance(result[0], Plain)
+        assert "```html" in result[0].text
+
+    def test_html_keep_original(self):
+        """HTML 渲染且保留原文：Plain + Image。"""
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png_data")
+        cfg = _make_cfg(html_mode="渲染且保留原文")
+        result = asyncio.run(
+            build_chain([HtmlDoc(code="<html></html>")], cfg, None, "/tmp", renderers={HtmlDoc: fake})
+        )
+        assert len(result) == 2
+        assert isinstance(result[0], Plain)
+        assert isinstance(result[1], Image)
+
+    def test_mermaid_render_and_md(self):
+        """Mermaid 渲染且md文件：Image + File。"""
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png_data")
+        cfg = _make_cfg(mermaid_mode="渲染且md文件")
+        result = asyncio.run(
+            build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: fake})
+        )
+        assert len(result) == 2
+        assert isinstance(result[0], Image)
+        assert isinstance(result[1], AstrFile)
+
+    def test_mermaid_render_image(self):
+        """Mermaid 图表渲染图像模式。"""
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png_data")
+        cfg = _make_cfg(mermaid_mode="渲染图像")
+        result = asyncio.run(
+            build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: fake})
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
+
+    def test_render_failure_falls_back_to_text(self):
+        """渲染异常时回退为原文。"""
+        from render.chain import build_chain
+
+        def boom(_seg):
+            raise RuntimeError("boom")
+
+        cfg = _make_cfg(mermaid_mode="渲染图像")
+        result = asyncio.run(
+            build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: boom})
+        )
+        assert isinstance(result[0], Plain)
+        assert "```mermaid" in result[0].text
+
+    def test_render_failure_with_md_mode_still_writes_file(self):
+        """图渲染失败但配置了 md 文件：仍写 .md，不回退原文。"""
+        from render.chain import build_chain
+
+        def boom(_seg):
+            raise RuntimeError("boom")
+
+        cfg = _make_cfg(mermaid_mode="渲染且md文件")
+        result = asyncio.run(
+            build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: boom})
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], AstrFile)
+        with open(result[0].file, encoding="utf-8") as f:
+            assert "```mermaid" in f.read()
+
+    def test_mermaid_md_only(self):
+        """仅md文件模式：只有 File 没有 Image，不调渲染。"""
+        from render.chain import build_chain
+
+        fake = MagicMock(return_value=b"fake_png_data")
+        cfg = _make_cfg(mermaid_mode="仅md文件")
+        result = asyncio.run(
+            build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: fake})
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], AstrFile)
+        fake.assert_not_called()
 
     def test_code_render_with_md(self):
         """渲染且md文件：Image + File。"""

@@ -16,11 +16,17 @@ class RenderConfig:
         table_mode: 表格处理模式。
         expr_mode: 数学表达式处理模式。
         temp_ttl: 临时文件存活分钟数（0=发送完成后立即删除）。
+        html_mode: HTML 文档处理模式。
+        mermaid_mode: Mermaid 图表处理模式。
+        html_width: HTML 文档渲染宽度（像素）。
     """
     code_mode: str
     table_mode: str
     expr_mode: str
     temp_ttl: int
+    html_mode: str = "渲染图像"
+    mermaid_mode: str = "渲染图像"
+    html_width: int = 1000
 
 
 @dataclass(frozen=True)
@@ -95,6 +101,9 @@ def load_config(raw: dict) -> tuple[RenderConfig, SegmentConfig, CleanConfig]:
         table_mode=render_raw.get("表格", "渲染图像"),
         expr_mode=render_raw.get("表达式", "渲染图像"),
         temp_ttl=int(render_raw.get("临时文件存活", 3)),
+        html_mode=render_raw.get("HTML", "渲染图像"),
+        mermaid_mode=render_raw.get("Mermaid", "渲染图像"),
+        html_width=int(render_raw.get("HTML 宽度", 1000)),
     )
 
     segment_cfg = SegmentConfig(

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**、**表格**和**数学表达式**，渲染为图片/文件后替换到消息链，并清洗剩余文本中的 markdown 格式标记（加粗、斜体、删除线等）。
+AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**、**HTML 文档**、**Mermaid 图表**、**表格**和**数学表达式**，渲染为图片/文件后替换到消息链，并清洗剩余文本中的 markdown 格式标记（加粗、斜体、删除线等）。
 
 管道位置：`OnDecoratingResultEvent`（priority=1000），在 RespondStage 之前修改 `result.chain`。
 
@@ -94,6 +94,8 @@ flowchart LR
     code_r["code_render.py"]
     table_r["table_render.py"]
     expr_r["expr_render.py"]
+    html_r["html_render.py<br/>pytakumi"]
+    mmd_r["mermaid_render.py<br/>mermaid.ink"]
   end
   subgraph 基础设施
     font["font.py<br/>字体服务"]
@@ -110,7 +112,9 @@ flowchart LR
   chain --> code_r
   chain --> cfg
   chain --> expr_r
+  chain --> html_r
   chain --> mdc
+  chain --> mmd_r
   chain --> parser
   chain --> tdom
   chain --> table_r
@@ -130,7 +134,7 @@ flowchart LR
   classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
   classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
   class main,chain deep;
-  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,deliv mid;
+  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv mid;
   class font,cfg,ts leaf;
 ```
 
@@ -147,12 +151,14 @@ flowchart LR
 
 | 模块 | 职责 |
 |------|------|
-| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain） |
+| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/HtmlDoc/MermaidBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain） |
 | `render/table_domain.py` | Span/RichCell/Table 模型 + 表格解析/还原（`parse_table`/`table_to_markdown`/`table_to_plain`） |
 | `render/inline_format.py` | 行内格式状态机 `FormatState`/`advance`，表格与清洗共用 |
 | `render/code_render.py` | pygments → pillow 渲染代码块，返回 PNG bytes |
 | `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
 | `render/expr_render.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
+| `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
+| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，5s 超时 + 5xx 重试一次，失败抛给上层回退 |
 | `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条/装配 + async 并发组装 + `process_chain` 管线 |
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
@@ -168,7 +174,9 @@ flowchart LR
 
 ### 依赖
 
-`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`
+`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`, `pytakumi`
+
+`skills/show-me/` 是插件内置技能：AstrBot 扫描 `<plugin>/skills/<name>/SKILL.md`，frontmatter 只读 `description`（`disable-model-invocation` 无效）。同名技能时 `data/skills/` 优先，会遮住插件内置版本。
 
 ### 配置
 
@@ -178,6 +186,9 @@ flowchart LR
 - 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染且md文件）
 - 表格：同上五选项（默认 渲染图像）
 - 表达式：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像）
+- Mermaid：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染图像），图片走 mermaid.ink，需联网；md 文件由 QQ 原生渲染
+- HTML：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像），只处理含 `<!DOCTYPE`/`<html>` 的完整文档
+- HTML 宽度（像素）：默认 1000，高度按内容自适应
 - 临时文件存活（分钟）：3=默认保留 3 分钟，0=即时删除，-1=永久保留
 
 **分段**（`raw["分段"]`）：

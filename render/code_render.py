@@ -10,7 +10,8 @@ import logging
 from PIL import Image
 from pygments import highlight
 from pygments.formatters.img import ImageFormatter
-from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.lexers import TextLexer, get_lexer_by_name
+from pygments.util import ClassNotFound
 
 from render.font import find_font_path
 
@@ -34,9 +35,11 @@ def render_code(
     # pygments 语法高亮 → 图片
     try:
         lexer = get_lexer_by_name(lang)
-    except Exception:
-        logger.warning("代码块语言 '%s' 无对应 lexer，已回退到 guess_lexer", lang)
-        lexer = guess_lexer(code)
+    except ClassNotFound:
+        # 不猜：guess_lexer 会把 mermaid 认成 ECLLexer、调用树认成 ScdocLexer，
+        # 出来的颜色与内容无关，不如按纯文本渲染。
+        logger.warning("代码块语言 '%s' 无对应 lexer，按纯文本渲染", lang)
+        lexer = TextLexer()
     formatter = ImageFormatter(
         style="material",
         font_size=38,  # 18pt @ 150 DPI (150/72 * 18 ≈ 38)

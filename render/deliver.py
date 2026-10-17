@@ -41,7 +41,7 @@ def _has_content(comps: list) -> bool:
 def _temp_paths(comps: list) -> list[str]:
     """收集组件中本插件生成的临时磁盘文件路径（去重）。
 
-    只匹配 code/table/expr_时间戳.{png,md} 命名模式，避免误伤
+    只匹配 code/table/expr/html/mermaid_时间戳.{png,md} 命名模式，避免误伤
     消息链中用户或 LLM 的原始图片等外部文件。
 
     Args:
