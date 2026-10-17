@@ -13,7 +13,7 @@ from typing import Any
 
 from pytakumi import Renderer
 
-from render.font import find_font_path
+from render.font import find_font_spec
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +53,9 @@ def init_html(width: int = _DEFAULT_WIDTH) -> None:
 
     # 系统没有中文字体时，回退到插件自带字体，避免输出豆腐块。
     if not registered:
-        fallback = find_font_path()
+        fallback = find_font_spec()
         if fallback:
-            with open(fallback, "rb") as f:
+            with open(fallback.path, "rb") as f:
                 renderer.register_font(f.read(), name="Sarasa Mono SC")
 
     with _lock:
