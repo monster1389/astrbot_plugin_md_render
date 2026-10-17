@@ -10,7 +10,12 @@ import sys
 from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.event import (
+    AstrMessageEvent,
+    MessageChain,
+    ResultContentType,
+    filter,
+)
 from astrbot.api.message_components import File as AstrFile
 from astrbot.api.message_components import Image
 from astrbot.api.star import Context, Star, StarTools, register
@@ -32,7 +37,7 @@ from render.tempstore import stop as _stop_cleaner  # noqa: E402
     "astrbot_plugin_md_render",
     "monster1389",
     "Markdown 渲染插件",
-    "1.4.0",
+    "1.5.0",
 )
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、HTML 文档、Mermaid 图表、表格、数学表达式渲染为图片。
@@ -67,6 +72,14 @@ class MdRenderPlugin(Star):
             event: AstrBot 消息事件。
         """
         result = event.get_result()
+        if result.result_content_type is ResultContentType.STREAMING_FINISH:
+            # 流式阶段已把原文发给用户，RespondStage 不会再发这条结果。
+            # 实时分段回复下继续渲染还会经 deliver 重复发送一遍内容。
+            logger.debug("跳过流式结束通知")
+            return
+        if self.cfg.model_only and not result.is_model_result():
+            logger.debug("跳过非模型回复（仅处理模型回复已开启）")
+            return
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
 
         messages = await process_chain(

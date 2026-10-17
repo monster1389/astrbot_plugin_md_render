@@ -19,6 +19,7 @@ class RenderConfig:
         html_mode: HTML 文档处理模式。
         mermaid_mode: Mermaid 图表处理模式。
         html_width: HTML 文档渲染宽度（像素）。
+        model_only: 仅处理模型回复（根级配置，非「渲染」块内）。
     """
     code_mode: str
     table_mode: str
@@ -27,6 +28,7 @@ class RenderConfig:
     html_mode: str = "渲染图像"
     mermaid_mode: str = "渲染图像"
     html_width: int = 1000
+    model_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +106,7 @@ def load_config(raw: dict) -> tuple[RenderConfig, SegmentConfig, CleanConfig]:
         html_mode=render_raw.get("HTML", "渲染图像"),
         mermaid_mode=render_raw.get("Mermaid", "渲染图像"),
         html_width=int(render_raw.get("HTML 宽度", 1000)),
+        model_only=bool(raw.get("仅处理模型回复", False)),
     )
 
     segment_cfg = SegmentConfig(

@@ -1,4 +1,10 @@
 {
+  "仅处理模型回复": {
+    "type": "bool",
+    "description": "仅处理模型回复",
+    "hint": "开启后只渲染 LLM / Agent 产出的回复；其它插件与内置命令的普通消息原样放过。",
+    "default": false
+  },
   "渲染": {
     "type": "object",
     "description": "渲染",

@@ -55,6 +55,16 @@ class _MockAstrMessageEvent:
     pass
 
 
+class _MockResultContentType:
+    """与 AstrBot ResultContentType 成员齐平的字符串桩。"""
+
+    LLM_RESULT = "llm_result"
+    AGENT_RUNNER_ERROR = "agent_runner_error"
+    GENERAL_RESULT = "general_result"
+    STREAMING_RESULT = "streaming_result"
+    STREAMING_FINISH = "streaming_finish"
+
+
 class _MockMessageChain:
     def __init__(self):
         self.chain = []
@@ -62,6 +72,7 @@ class _MockMessageChain:
 
 _event.filter = _MockFilter()
 _event.AstrMessageEvent = _MockAstrMessageEvent
+_event.ResultContentType = _MockResultContentType
 _event.MessageChain = _MockMessageChain
 sys.modules["astrbot.api.event"] = _event
 
@@ -72,10 +83,16 @@ astrbot.api.AstrBotConfig = dict
 from astrbot.api.message_components import Plain  # noqa: E402
 
 
-def _make_event(chain: list):
-    """构造 mock AstrMessageEvent，携带指定 chain。"""
+def _make_event(
+    chain: list,
+    content_type: str = _MockResultContentType.GENERAL_RESULT,
+    model: bool = True,
+):
+    """构造 mock AstrMessageEvent，携带指定 chain 与结果类型。"""
     result = MagicMock()
     result.chain = chain
+    result.result_content_type = content_type
+    result.is_model_result.return_value = model
     event = MagicMock()
     event.get_result.return_value = result
     return event
@@ -165,3 +182,63 @@ class TestProcessChainWiring:
         origin, mc = context.send_message.await_args.args
         assert origin == "napcat:FriendMessage:1"
         assert mc.chain[0].text == "发送"
+
+
+class TestMessageScope:
+    """流式结束与非模型回复的跳过规则。"""
+
+    def _run(
+        self,
+        content_type: str,
+        model: bool,
+        model_only: bool,
+        chain: list | None = None,
+    ):
+        """执行一次事件处理，返回 process_chain 的 mock 与事件本身。"""
+        chain = chain if chain is not None else [Plain("hi")]
+        event = _make_event(chain, content_type=content_type, model=model)
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+        context = MagicMock()
+        context.send_message = AsyncMock()
+
+        with patch("main.process_chain", AsyncMock(return_value=[[Plain("x")]])) as mock_pc, \
+                patch("main.deliver", AsyncMock(return_value=[Plain("x")])) as mock_deliver, \
+                patch("main.StarTools") as mock_tools:
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = _make_plugin(context)
+            plugin.cfg.model_only = model_only
+            asyncio.run(plugin.on_decorating_result(event))
+
+        return mock_pc, mock_deliver, event, chain
+
+    def test_streaming_finish_skipped(self):
+        """流式结束通知不渲染：内容已在流式阶段发出。"""
+        mock_pc, mock_deliver, event, chain = self._run(
+            _MockResultContentType.STREAMING_FINISH, model=True, model_only=False
+        )
+        mock_pc.assert_not_awaited()
+        mock_deliver.assert_not_awaited()
+        assert event.get_result.return_value.chain is chain
+
+    def test_model_only_skips_non_model_result(self):
+        """开启「仅处理模型回复」时，普通消息结果原样放过。"""
+        mock_pc, mock_deliver, event, chain = self._run(
+            _MockResultContentType.GENERAL_RESULT, model=False, model_only=True
+        )
+        mock_pc.assert_not_awaited()
+        mock_deliver.assert_not_awaited()
+        assert event.get_result.return_value.chain is chain
+
+    def test_model_only_processes_model_result(self):
+        """开启「仅处理模型回复」时，LLM 回复照常渲染。"""
+        mock_pc, _, _, _ = self._run(
+            _MockResultContentType.LLM_RESULT, model=True, model_only=True
+        )
+        assert mock_pc.await_count == 1
+
+    def test_model_only_off_processes_non_model_result(self):
+        """关闭时与旧行为一致：普通消息结果也处理。"""
+        mock_pc, _, _, _ = self._run(
+            _MockResultContentType.GENERAL_RESULT, model=False, model_only=False
+        )
+        assert mock_pc.await_count == 1

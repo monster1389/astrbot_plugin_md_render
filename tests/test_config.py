@@ -20,6 +20,7 @@ class TestLoadConfig:
         assert render_cfg.html_mode == "渲染图像"
         assert render_cfg.mermaid_mode == "渲染图像"
         assert render_cfg.html_width == 1000
+        assert render_cfg.model_only is False
         assert seg_cfg.divider_mode == "切分"
         assert seg_cfg.blank_line_mode == "切分"
         assert seg_cfg.send_delay is True
@@ -57,6 +58,7 @@ class TestLoadConfig:
                 "加粗": False,
                 "斜体": True,
             },
+            "仅处理模型回复": True,
         }
         render_cfg, seg_cfg, clean_cfg = load_config(raw)
         assert render_cfg.code_mode == "渲染图像"
@@ -66,6 +68,7 @@ class TestLoadConfig:
         assert render_cfg.html_mode == "渲染且保留原文"
         assert render_cfg.mermaid_mode == "不处理"
         assert render_cfg.html_width == 800
+        assert render_cfg.model_only is True
         assert seg_cfg.divider_mode == "不处理"
         assert seg_cfg.blank_line_mode == "切分"
         assert seg_cfg.send_delay is False
