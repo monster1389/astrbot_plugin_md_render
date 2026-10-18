@@ -44,6 +44,17 @@ class FontSpec:
     index: int = 0
 
 
+# 系统候选在 Typst/fontconfig 里的族名
+_FAMILY_NAMES: dict[FontSpec, str] = {
+    FontSpec(_NOTO_CJK, 7): "Noto Sans Mono CJK SC",
+    FontSpec(_WQY, 1): "WenQuanYi Micro Hei Mono",
+    FontSpec(_DEJAVU, 0): "DejaVu Sans Mono",
+}
+# 手动放置的字体按文件名推断族名
+_MANUAL_FAMILIES: dict[str, str] = {
+    "SarasaMonoSC-Regular.ttf": "Sarasa Mono SC",
+}
+
 _font_dir: str | None = None
 _font_spec: FontSpec | None = None
 _font_cache: dict[int, ImageFont.FreeTypeFont] = {}
@@ -67,6 +78,39 @@ def find_font_spec() -> FontSpec | None:
         第一个存在的字体规格，都没找到返回 None。
     """
     return _discover_font_spec(_font_dir)
+
+
+def font_family(spec: FontSpec | None) -> str | None:
+    """返回字体在 Typst 里的族名。
+
+    Args:
+        spec: 字体规格；None 表示没找到字体。
+
+    Returns:
+        字体族名；未知字体返回 None。
+    """
+    if spec is None:
+        return None
+    family = _FAMILY_NAMES.get(spec)
+    if family is not None:
+        return family
+    return _MANUAL_FAMILIES.get(os.path.basename(spec.path))
+
+
+def font_search_dir(spec: FontSpec | None) -> str | None:
+    """返回需要额外注册给 Typst 的字体目录。
+
+    Typst 默认能看见系统字体，只有手动放进 data_dir 的字体需要显式注册。
+
+    Args:
+        spec: 字体规格。
+
+    Returns:
+        字体所在目录；系统字体或没有字体时返回 None。
+    """
+    if spec is None or spec in _FAMILY_NAMES:
+        return None
+    return os.path.dirname(spec.path)
 
 
 def get_font(size: int) -> ImageFont.FreeTypeFont:

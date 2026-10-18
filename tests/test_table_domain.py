@@ -36,13 +36,13 @@ class TestBlockMathInCell:
         assert isinstance(table, Table)
         assert table.rows[0][0].spans == [Span(text="$E=mc^2$")]
 
-    def test_multi_line_cell_restored_literal(self):
-        """格内多行 $$...$$ 还原为字面文本。"""
+    def test_unclosed_cell_math_stays_literal(self):
+        """同行内没有闭合的 $$ 不做跨行匹配，原样保留。"""
         text = "| a |\n| --- |\n| $$x^2\n\nmore$$ |"
         segments = parse(text)
         table = segments[0]
         assert isinstance(table, Table)
-        assert table.rows[0][0].spans == [Span(text="$x^2\n\nmore$")]
+        assert table.rows[0][0].spans == [Span(text="$$x^2")]
 
     def test_cell_math_in_markdown_roundtrip(self):
         """格内 $$...$$ 经 table_to_markdown 还原为 $...$。"""

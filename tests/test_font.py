@@ -2,7 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 from render import font as _font
-from render.font import FontSpec
+from render.font import FontSpec, font_family, font_search_dir
 
 NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 WQY = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
@@ -42,6 +42,27 @@ class TestFindFontSpec:
         with patch("os.path.exists", side_effect=_only(SARASA, NOTO)):
             _font.init_font("/data")
             assert _font.find_font_spec() == FontSpec(SARASA)
+
+
+class TestFontFamily:
+    def test_system_noto(self):
+        """系统 Noto 用等宽 CJK 族名。"""
+        assert font_family(FontSpec(NOTO, 7)) == "Noto Sans Mono CJK SC"
+
+    def test_manual_sarasa(self):
+        """手动放置的 Sarasa 按文件名推断族名。"""
+        assert font_family(FontSpec(SARASA)) == "Sarasa Mono SC"
+
+    def test_unknown_font(self):
+        """未知字体返回 None。"""
+        assert font_family(FontSpec("/fake/font.ttf")) is None
+        assert font_family(None) is None
+
+    def test_search_dir_only_for_manual(self):
+        """系统字体不需要额外注册目录，手动字体要。"""
+        assert font_search_dir(FontSpec(NOTO, 7)) is None
+        assert font_search_dir(FontSpec(SARASA)) == "/data/fonts"
+        assert font_search_dir(None) is None
 
 
 class TestGetFont:

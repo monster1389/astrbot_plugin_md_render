@@ -1,8 +1,9 @@
 markdown-it-py>=4.0
 Pillow>=11.0
-pillowlatex>=0.1.4
 pytakumi>=0.1.5
 Pygments>=2.18
+typst>=0.15
+tylax>=0.3.8
 
 # dev
 pytest>=9.0

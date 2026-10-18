@@ -111,6 +111,60 @@ class TestExpr:
         assert len(inline_exprs) == 1
         assert inline_exprs[0].expr == "1+2=3"
 
+    def test_escaped_dollar_inside_expr(self):
+        r"""表达式内的 \$ 是内容，不是闭合符。"""
+        text = r"美元 $\$9.99$，下划线 $a\_b$"
+        segments = parse(text)
+        inline_exprs = [s for s in segments if isinstance(s, InlineExpr)]
+        assert [s.expr for s in inline_exprs] == [r"\$9.99", r"a\_b"]
+
+    def test_inline_code_not_treated_as_expr(self):
+        """行内代码里的 $...$ 保持原文，不渲染。"""
+        text = "行内代码：`$\\frac{a}{b}$`、`\\alpha`、`$$E=mc^2$$`。"
+        segments = parse(text)
+        assert not any(isinstance(s, InlineExpr) for s in segments)
+        assert not any(isinstance(s, BlockExpr) for s in segments)
+        plain = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "`$\\frac{a}{b}$`" in plain
+
+
+class TestBlockExpr:
+    def test_double_dollar_in_code_does_not_swallow(self):
+        """正文里被反引号包住的 $$ 不会开启块级匹配，后续章节保留。"""
+        text = (
+            "裸文本里的危险货：`$`、`$$`、`\\`。\n\n"
+            "## 5. Unicode\n\n上标：x²。\n\n"
+            "## 6. 对齐\n\n$$\n\\begin{aligned}\na &= b\n\\end{aligned}\n$$\n\n结尾"
+        )
+        segments = parse(text)
+        block_exprs = [s for s in segments if isinstance(s, BlockExpr)]
+        assert len(block_exprs) == 1
+        assert "begin{aligned}" in block_exprs[0].expr
+        plain = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "## 5. Unicode" in plain
+        assert "上标：x²" in plain
+
+    def test_unclosed_block_stays_text(self):
+        """没有闭合的 $$ 按原文保留，不吃后续内容。"""
+        text = "$$\n未闭合的公式\n\n后续正文"
+        segments = parse(text)
+        assert not any(isinstance(s, BlockExpr) for s in segments)
+        plain = "".join(s.text for s in segments if isinstance(s, Segment))
+        assert "后续正文" in plain
+
+    def test_single_line_block_expr(self):
+        """同一行内的 $$...$$ 仍是块级表达式。"""
+        segments = parse("$$E=mc^2$$")
+        block_exprs = [s for s in segments if isinstance(s, BlockExpr)]
+        assert [s.expr for s in block_exprs] == ["E=mc^2"]
+
+    def test_code_fence_double_dollar_untouched(self):
+        """代码围栏里的 $$ 不抽取。"""
+        text = "```latex\n$$x^2$$\n```"
+        segments = parse(text)
+        assert isinstance(segments[0], CodeBlock)
+        assert segments[0].code == "$$x^2$$"
+
 
 class TestDivider:
     def test_divider_with_blank_lines(self):

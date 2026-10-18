@@ -2,6 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 from render.table_domain import RichCell, Span, Table
+from render.table_render import render_table
 
 
 def _cell(text: str) -> RichCell:
@@ -30,7 +31,6 @@ class TestRenderTable:
             rows=[[_cell("张三"), _cell("20")], [_cell("李四"), _cell("25")]],
         )
 
-        from render.table_render import render_table
         png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
@@ -55,7 +55,6 @@ class TestRenderTable:
 
         tbl = Table(headers=[_cell("A")], rows=[])
 
-        from render.table_render import render_table
         png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
@@ -88,7 +87,6 @@ class TestRenderTable:
             ],
         )
 
-        from render.table_render import render_table
         png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
@@ -124,12 +122,38 @@ class TestRenderTable:
             ],
         )
 
-        from render.table_render import render_table
         png_bytes = render_table(tbl)
 
         assert isinstance(png_bytes, bytes)
         assert len(png_bytes) > 0
         mock_img.save.assert_called_once()
+
+
+class TestTableCellMath:
+    """格内 $...$ 渲染为公式图。"""
+
+    @patch("render.table_render.render_expr_image")
+    def test_cell_expr_rendered(self, mock_expr):
+        """公式单元格调用表达式渲染，而不是画源码。"""
+        from PIL import Image as PILImage
+
+        mock_expr.return_value = PILImage.new("RGBA", (30, 20), (0, 0, 0, 255))
+        tbl = Table(headers=[_cell("公式")], rows=[[_cell("$x^2$")]])
+
+        png_bytes = render_table(tbl)
+
+        assert isinstance(png_bytes, bytes)
+        assert len(png_bytes) > 0
+        mock_expr.assert_called_once()
+        assert mock_expr.call_args.args[0] == "x^2"
+
+    @patch("render.table_render.render_expr_image")
+    def test_currency_not_rendered(self, mock_expr):
+        """孤立的 $ 货币符号不当作公式。"""
+        tbl = Table(headers=[_cell("价格")], rows=[[_cell("$5")]])
+        render_table(tbl)
+
+        mock_expr.assert_not_called()
 
 
 class TestTableToText:

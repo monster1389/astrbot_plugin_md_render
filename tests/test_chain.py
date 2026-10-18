@@ -286,22 +286,19 @@ class TestBuildChain:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    @patch("render.expr_render.Image")
-    @patch("render.expr_render.RenderLaTeX")
-    @patch("render.expr_render.GetLaTeXObjs")
-    def test_inline_expr_real_renderer_contract(self, mock_getlatex, mock_render, mock_pil_image):
+    @patch("render.expr_render.typst.compile")
+    def test_inline_expr_real_renderer_contract(self, mock_compile):
         """真实 render_expr 经 build_chain 统一契约调用，不抛参数不匹配。"""
+        from io import BytesIO
+
+        from PIL import Image as PILImage
+
         from render.chain import build_chain
         from render.expr_render import render_expr
 
-        mock_getlatex.return_value = MagicMock()
-        mock_render_img = MagicMock()
-        mock_render_img.size = (100, 20)
-        mock_render_img.split.return_value = (None, None, None, MagicMock())
-        mock_render.return_value.img = mock_render_img
-        mock_result = MagicMock()
-        mock_result.save.side_effect = lambda *args, **kw: args[0].write(b"fake_png")
-        mock_pil_image.new.return_value = mock_result
+        buf = BytesIO()
+        PILImage.new("RGBA", (100, 20), (0, 0, 0, 255)).save(buf, "PNG")
+        mock_compile.return_value = buf.getvalue()
 
         segments = [InlineExpr(expr="E=mc^2")]
         cfg = _make_cfg(expr_mode="渲染图像")

@@ -152,12 +152,12 @@ flowchart LR
 
 | 模块 | 职责 |
 |------|------|
-| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/HtmlDoc/MermaidBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain） |
+| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/HtmlDoc/MermaidBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain）。块级公式只认行首 `$$` 或同行内成对；代码围栏与行内代码里的 `$` 不参与识别 |
 | `render/table_domain.py` | Span/RichCell/Table 模型 + 表格解析/还原（`parse_table`/`table_to_markdown`/`table_to_plain`） |
 | `render/inline_format.py` | 行内格式状态机 `FormatState`/`advance`，表格与清洗共用 |
 | `render/code_render.py` | pygments → pillow 渲染代码块，返回 PNG bytes |
-| `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
-| `render/expr_render.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
+| `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排，格内 `$...$` 画成公式图 |
+| `render/expr_render.py` | Typst 渲染 LaTeX（tylax 做 LaTeX→Typst 转换）。`render_expr_image` 返回透明底图像供表格嵌入，`render_expr` 返回 PNG bytes；转换或编译失败抛给上层回退原文 |
 | `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
 | `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池），5s 超时 + 5xx 重试一次，失败抛给上层回退 |
 | `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（含 15s 单元素渲染超时） |
@@ -175,7 +175,7 @@ flowchart LR
 
 ### 依赖
 
-`pygments`, `pillow`, `markdown-it-py`, `pillowlatex`, `pytakumi`
+`pygments`, `pillow`, `markdown-it-py`, `typst`, `tylax`, `pytakumi`
 
 `skills/show-me/` 是插件内置技能：AstrBot 扫描 `<plugin>/skills/<name>/SKILL.md`，frontmatter 只读 `description`（`disable-model-invocation` 无效）。同名技能时 `data/skills/` 优先，会遮住插件内置版本。
 

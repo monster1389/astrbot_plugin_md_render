@@ -13,6 +13,7 @@ AstrBot 插件，在 `OnDecoratingResultEvent` 阶段把消息中的 markdown **
 ## 解析（parse）
 
 - **Segment**：markdown-it 解析产物。`CodeBlock`（代码块）、`HtmlDoc`（完整 HTML 文档）、`MermaidBlock`（Mermaid 图表）、`Table`（表格）、`InlineExpr`/`BlockExpr`（行内/块级表达式）、`Divider`（分隔线 `---`）、`Segment`（纯文本段）。
+- **块级表达式**：`$$` 独占行首开块、行尾闭合，或同一行内成对；正文里零散的 `$$` 不开启匹配，代码围栏与行内代码里的 `$` 不参与识别。
 - **消息链 chain**：AstrBot 的原始组件列表，Plain 文本是解析的输入。
 - **占位符**：解析表达式时先把内容替换为 `\x01MATHBLOCK{n}\x01` 等占位符，绕过 markdown-it 对特殊字符的处理。
 
@@ -31,6 +32,12 @@ AstrBot 插件，在 `OnDecoratingResultEvent` 阶段把消息中的 markdown **
 - **保序**：严格按分组顺序产出，某组渲染慢时它后面的消息一律等它，绝不越过。
 
 模块：`render/chain.py`。
+
+## 渲染（render）
+
+- **公式转换 to_typst**：tylax 把 LaTeX 转成 Typst 语法；`\hbar`、`\&`、`\_`、`\mathscr`、`\wp` 等已知缺口在转换前后修补，转换或编译失败直接回退原文。词义：把「用户写的 LaTeX」翻译成「Typst 能排的写法」。
+- **数学字体 math font**：Typst 内置 New Computer Modern；公式里的中文走 `font.py` 发现的字体（手动 Sarasa 优先，系统 Noto 兜底）。
+- **格内公式 cell expr**：表格里 `$...$` 渲染为小图嵌入单元格，格内文字与公式图分开度量、垂直居中。
 
 ## 送达（deliver）
 
