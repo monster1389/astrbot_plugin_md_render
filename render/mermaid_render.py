@@ -5,8 +5,8 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
-import time
 from typing import Any
 
 import httpx
@@ -19,7 +19,7 @@ _RETRY_DELAY = 0.5
 
 _PNG_MAGIC = b"\x89PNG"
 
-_client = httpx.Client(timeout=_TIMEOUT)
+_client = httpx.AsyncClient(timeout=_TIMEOUT)
 
 
 def build_url(code: str) -> str:
@@ -35,7 +35,7 @@ def build_url(code: str) -> str:
     return _ENDPOINT.format(payload=payload)
 
 
-def render_mermaid(seg: Any) -> bytes:
+async def render_mermaid(seg: Any) -> bytes:
     """把 mermaid 代码块渲染为 PNG。
 
     Args:
@@ -52,7 +52,7 @@ def render_mermaid(seg: Any) -> bytes:
     error: Exception = RuntimeError("mermaid.ink 渲染失败")
     for attempt in range(2):
         try:
-            response = _client.get(url)
+            response = await _client.get(url)
         except httpx.HTTPError as exc:
             error = exc
         else:
@@ -62,5 +62,5 @@ def render_mermaid(seg: Any) -> bytes:
             if response.status_code < 500:
                 raise error
         if attempt == 0:
-            time.sleep(_RETRY_DELAY)
+            await asyncio.sleep(_RETRY_DELAY)
     raise error

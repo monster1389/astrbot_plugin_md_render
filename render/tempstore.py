@@ -8,12 +8,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import re
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 # 本插件渲染产物命名模式：code/table/expr/html/mermaid_时间戳_微秒.{png,md}
 _TEMP_FILE_RE = re.compile(r"^(code|table|expr|html|mermaid)_\d{8}_\d{6}_\d{6}\.(png|md)$")

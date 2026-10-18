@@ -4,14 +4,10 @@ Pillow 手绘表格，支持格内加粗/斜体/删除线/行内代码/链接混
 """
 from __future__ import annotations
 
-import logging
-
 from PIL import Image, ImageDraw, ImageFont
 
 from render.font import get_font
 from render.table_domain import RichCell, Span, Table
-
-logger = logging.getLogger(__name__)
 
 # 硬编码颜色预设（后续可能从配置推算）
 _RGB_BG = (26, 26, 46)

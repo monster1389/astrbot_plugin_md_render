@@ -35,7 +35,7 @@ from render.tempstore import stop as _stop_cleaner  # noqa: E402
     "astrbot_plugin_md_render",
     "monster1389",
     "Markdown 渲染插件",
-    "1.5.2",
+    "1.5.3",
 )
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、HTML 文档、Mermaid 图表、表格、数学表达式渲染为图片。

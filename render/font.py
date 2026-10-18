@@ -9,14 +9,13 @@
 """
 from __future__ import annotations
 
-import logging
 import os
 import threading
 from dataclasses import dataclass
 
 from PIL import ImageFont
 
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 # AstrBot 官方镜像自带（fonts-noto-cjk），第 7 个 face 为 Noto Sans Mono CJK SC
 _NOTO_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"

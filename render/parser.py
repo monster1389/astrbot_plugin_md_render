@@ -1,16 +1,14 @@
 """Markdown 解析器 —— 使用 markdown-it-py 提取代码块/HTML 文档/图表/表格/表达式/分隔线。"""
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
+from astrbot.api import logger
 from render.table_domain import Table, parse_table
-
-logger = logging.getLogger(__name__)
 
 # 用于标记预提取的 $$...$$ 块级数学表达式
 _MATH_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)

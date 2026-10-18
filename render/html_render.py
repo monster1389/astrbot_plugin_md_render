@@ -5,7 +5,6 @@ pytakumi 不解析 HTML 里的 ``<style>`` 标签，样式必须抽出来经
 """
 from __future__ import annotations
 
-import logging
 import os
 import re
 import threading
@@ -14,8 +13,6 @@ from typing import Any
 from pytakumi import Renderer
 
 from render.font import find_font_spec
-
-logger = logging.getLogger(__name__)
 
 _STYLE_RE = re.compile(r"<style[^>]*>(.*?)</style>", re.DOTALL | re.IGNORECASE)
 

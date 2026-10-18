@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import io
-import logging
 from typing import Any
 
 from PIL import Image, ImageFont
@@ -14,9 +13,8 @@ from pygments.formatters.img import STYLES, FontManager, ImageFormatter
 from pygments.lexers import TextLexer, get_lexer_by_name
 from pygments.util import ClassNotFound
 
+from astrbot.api import logger
 from render.font import find_font_spec
-
-logger = logging.getLogger(__name__)
 
 _FONT_SIZE = 38  # 18pt @ 150 DPI (150/72 * 18 ≈ 38)
 

@@ -91,6 +91,20 @@ class TestBuildChain:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
+    def test_async_renderer_is_awaited(self):
+        """协程渲染器直接 await，不丢进线程池。"""
+        from render.chain import build_chain
+
+        async def fake(seg):
+            return b"fake_png_data"
+
+        cfg = _make_cfg(code_mode="渲染图像")
+        result = asyncio.run(
+            build_chain([CodeBlock(lang="py", code="x=1")], cfg, None, "/tmp", renderers={CodeBlock: fake})
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], Image)
+
     def test_html_render_image(self):
         """HTML 文档渲染图像模式。"""
         from render.chain import build_chain

@@ -2,6 +2,12 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.5.3] - 2026-10-18
+
+### 变更
+- 日志统一改用 `from astrbot.api import logger`，不再用标准库 `logging.getLogger(__name__)`（插件市场审核要求）。`table_render` / `html_render` 原本没打过日志，未使用的 logger 直接删除。
+- `render_mermaid` 改为原生异步（`httpx.AsyncClient` + `asyncio.sleep`），不再占线程池线程；`build_chain` 识别协程渲染器直接 await，同步渲染器仍走 `asyncio.to_thread`。
+
 ## [1.5.2] - 2026-10-18
 
 ### 变更

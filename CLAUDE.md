@@ -40,6 +40,7 @@ docker restart astrbot
 ## 编码规范
 
 - **无兜底**：错误直接暴露，不静默吞掉
+- **日志**：一律 `from astrbot.api import logger`，不用标准库 `logging.getLogger(__name__)`（插件市场审核要求）
 - **无死代码、无冗余**：不写用不到的代码，高度复用、解耦
 - **Docstring**：中文，Google Style（`"""一句话概述。\n\nArgs:\n    x: ...\nReturns:\n    ...\n"""`）
 - **类型注解**：所有函数签名必须有完整类型注解
@@ -158,7 +159,7 @@ flowchart LR
 | `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排 |
 | `render/expr_render.py` | pillowlatex 渲染 LaTeX 表达式（行内/块级），返回 PNG bytes |
 | `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
-| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，5s 超时 + 5xx 重试一次，失败抛给上层回退 |
+| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池），5s 超时 + 5xx 重试一次，失败抛给上层回退 |
 | `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（含 15s 单元素渲染超时） |
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |

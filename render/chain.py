@@ -6,12 +6,13 @@ build_chain: 异步并发渲染，按配置模式组装单组消息链。
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from inspect import iscoroutinefunction
 from typing import Any
 
+from astrbot.api import logger
 from astrbot.api.message_components import File as AstrFile
 from astrbot.api.message_components import Image, Plain
 from render.code_render import render_code
@@ -37,8 +38,6 @@ from render.parser import (
 from render.table_domain import Table, table_to_markdown, table_to_plain
 from render.table_render import render_table
 from render.tempstore import build_temp_path
-
-logger = logging.getLogger(__name__)
 
 # 单个元素的渲染保险丝（秒）：只兜住渲染器卡死，正常路径不会触发——
 # mermaid.ink 自己 5s×2 次 + 0.5s 重试延迟 ≈ 10.5s 就会放弃。
@@ -144,7 +143,7 @@ def _renderer_for(
     seg_type: type,
     spec: ElementSpec,
     renderers: dict[type, Callable] | None,
-) -> Callable[[Any], bytes]:
+) -> Callable[[Any], Any]:
     """按覆盖层解析 segment 类型的渲染器，未覆盖回退 spec.render。
 
     Args:
@@ -158,6 +157,21 @@ def _renderer_for(
     if renderers and seg_type in renderers:
         return renderers[seg_type]
     return spec.render
+
+
+async def _render_one(renderer: Callable[[Any], Any], seg: Any) -> bytes:
+    """执行单个渲染器：协程渲染器直接 await，同步渲染器转线程池。
+
+    Args:
+        renderer: 渲染函数，同步返回 PNG 字节或协程返回 PNG 字节。
+        seg: 元素 segment。
+
+    Returns:
+        渲染出的 PNG 字节。
+    """
+    if iscoroutinefunction(renderer):
+        return await renderer(seg)
+    return await asyncio.to_thread(renderer, seg)
 
 
 def _recipe_for(spec: ElementSpec, cfg: RenderConfig) -> ModeSpec:
@@ -277,7 +291,7 @@ async def build_chain(
         if _recipe_for(spec, cfg).image:
             indices.append(i)
             coros.append(asyncio.wait_for(
-                asyncio.to_thread(_renderer_for(type(seg), spec, renderers), seg),
+                _render_one(_renderer_for(type(seg), spec, renderers), seg),
                 _RENDER_TIMEOUT,
             ))
 
