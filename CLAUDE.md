@@ -159,8 +159,8 @@ flowchart LR
 | `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排，格内 `$...$` 画成公式图 |
 | `render/expr_render.py` | Typst 渲染 LaTeX（tylax 做 LaTeX→Typst 转换）。`render_expr_image` 返回透明底图像供表格嵌入，`render_expr` 返回 PNG bytes；转换或编译失败抛给上层回退原文 |
 | `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
-| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池），5s 超时 + 5xx 重试一次，失败抛给上层回退 |
-| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（含 15s 单元素渲染超时） |
+| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池）；进程内单通道串行（服务拒绝并发），单张 10s，4xx 不重试、5xx 重试一次，失败抛给上层改发 `.md` |
+| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（本机渲染器 15s 保险丝，自管预算的 mermaid 不套） |
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
 | `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫 |
@@ -190,7 +190,7 @@ flowchart LR
 - 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染且md文件）
 - 表格：同上五选项（默认 渲染图像）
 - 表达式：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像）
-- Mermaid：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染图像），图片走 mermaid.ink，需联网；md 文件由 QQ 原生渲染
+- Mermaid：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染图像），图片走 mermaid.ink（需联网，串行）；渲染失败那张改发 `.md`，由 QQ 原生渲染（客户端只认部分图型）
 - HTML：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像），只处理含 `<!DOCTYPE`/`<html>` 的完整文档
 - HTML 宽度（像素）：默认 1000，高度按内容自适应
 - 临时文件存活（分钟）：3=默认保留 3 分钟，0=即时删除，-1=永久保留

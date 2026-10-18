@@ -202,7 +202,7 @@ class TestPipelineStreaming:
         assert asyncio.run(_run()) == [b"slow", b"fast"]
 
     def test_render_timeout_degrades(self):
-        """渲染超过保险丝：按失败降级为原文，不抛异常。"""
+        """渲染超过保险丝：按失败降级为 .md 文件，不抛异常。"""
         def hang(seg):
             time.sleep(0.3)
             return b"never"
@@ -213,8 +213,9 @@ class TestPipelineStreaming:
                 [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: hang}
             )
         assert len(result) == 1
-        assert isinstance(result[0][0], Plain)
-        assert "x=1" in result[0][0].text
+        assert result[0][0].name.endswith(".md")
+        with open(result[0][0].file, encoding="utf-8") as f:
+            assert "x=1" in f.read()
 
     def test_timeout_with_file_mode_keeps_md(self, tmp_path):
         """超时 + 渲染且md文件：仍写 .md 文件，不丢弃。"""

@@ -165,8 +165,8 @@ class TestBuildChain:
         assert len(result) == 1
         assert isinstance(result[0], Image)
 
-    def test_render_failure_falls_back_to_text(self):
-        """渲染异常时回退为原文。"""
+    def test_render_failure_emits_md_file(self):
+        """渲染异常时出 .md 文件（文件是保底形态），不回退源码文本。"""
         from render.chain import build_chain
 
         def boom(_seg):
@@ -176,8 +176,23 @@ class TestBuildChain:
         result = asyncio.run(
             build_chain([MermaidBlock(code="graph LR")], cfg, None, "/tmp", renderers={MermaidBlock: boom})
         )
+        assert len(result) == 1
+        assert isinstance(result[0], AstrFile)
+        with open(result[0].file, encoding="utf-8") as f:
+            assert "```mermaid" in f.read()
+
+    def test_expr_render_failure_falls_back_to_text(self):
+        """表达式不支持 .md 文件，渲染异常时回退原文。"""
+        from render.chain import build_chain
+
+        def boom(_seg):
+            raise RuntimeError("boom")
+
+        cfg = _make_cfg(expr_mode="渲染图像")
+        result = asyncio.run(
+            build_chain([InlineExpr(expr="x")], cfg, None, "/tmp", renderers={InlineExpr: boom})
+        )
         assert isinstance(result[0], Plain)
-        assert "```mermaid" in result[0].text
 
     def test_render_failure_with_md_mode_still_writes_file(self):
         """图渲染失败但配置了 md 文件：仍写 .md，不回退原文。"""
@@ -321,7 +336,7 @@ class TestBuildChain:
         fake.assert_not_called()
 
     def test_code_render_failure_fallback(self):
-        """代码块渲染失败时回退为 Plain 原文，不影响后续段落。"""
+        """代码块渲染失败时出 .md 文件（文件是保底形态），不影响后续段落。"""
         from render.chain import build_chain
         from render.config import RenderConfig
 
@@ -332,8 +347,9 @@ class TestBuildChain:
         )
         segments = [CodeBlock(lang="py", code="x=1"), Segment(text="后续文本")]
         result = asyncio.run(build_chain(segments, cfg, None, "/tmp", renderers={CodeBlock: fake}))
-        assert isinstance(result[0], Plain)
-        assert "```py" in result[0].text
+        assert isinstance(result[0], AstrFile)
+        with open(result[0].file, encoding="utf-8") as f:
+            assert "```py" in f.read()
         assert isinstance(result[1], Plain)
         assert result[1].text == "后续文本"
 

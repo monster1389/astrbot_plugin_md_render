@@ -39,8 +39,8 @@ from render.table_domain import Table, table_to_markdown, table_to_plain
 from render.table_render import render_table
 from render.tempstore import build_temp_path
 
-# 单个元素的渲染保险丝（秒）：只兜住渲染器卡死，正常路径不会触发——
-# mermaid.ink 自己 5s×2 次 + 0.5s 重试延迟 ≈ 10.5s 就会放弃。
+# 本机渲染器（pillow/typst）的保险丝（秒）：只兜住渲染器卡死，正常路径不会触发。
+# 自己有超时预算的渲染器（mermaid，走外部 HTTP）不套它，见 ElementSpec.timeout。
 _RENDER_TIMEOUT = 15.0
 
 
@@ -82,12 +82,14 @@ class ElementSpec:
         prefix: 产物文件名前缀。
         supports_file: 是否支持产出 .md 文件。
         mode_key: 该元素对应的 RenderConfig 模式字段名；为 None 表示固定产纯文本。
+        self_budgeted: 渲染器自带超时预算（如外部 HTTP），不套通用保险丝。
     """
     text: Callable[[Any, CleanConfig | None], str]
     render: Callable[[Any], bytes] | None = None
     prefix: str | None = None
     supports_file: bool = False
     mode_key: str | None = None
+    self_budgeted: bool = False
 
 
 _ELEMENT_SPECS: dict[type, ElementSpec] = {
@@ -117,6 +119,7 @@ _ELEMENT_SPECS: dict[type, ElementSpec] = {
         prefix="mermaid",
         supports_file=True,
         mode_key="mermaid_mode",
+        self_budgeted=True,
     ),
     InlineExpr: ElementSpec(
         text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
@@ -244,9 +247,9 @@ def _dispatch(
     spec = _ELEMENT_SPECS[type(seg)]
     recipe = _recipe_for(spec, cfg)
 
-    # 渲染失败：能出文件的模式仍写 .md（文件本就是渲染不出来时的保底形态），否则回退原文
+    # 渲染失败：没有原文可看就出 .md（文件是渲染不出来时的保底形态）
     if recipe.image and result is None:
-        if recipe.file and spec.supports_file and spec.prefix:
+        if not recipe.text and spec.supports_file and spec.prefix:
             _append_file(chain, spec.text(seg, None), spec.prefix, data_dir)
         else:
             chain.append(Plain(spec.text(seg, clean_cfg)))
@@ -269,7 +272,8 @@ async def build_chain(
 ) -> list[Plain | Image | AstrFile]:
     """将解析后的 Segment 列表转换为 AstrBot Component 列表。
 
-    并发提交渲染任务到线程池，全部完成后按原顺序组装；每个元素带渲染超时。
+    并发提交渲染任务到线程池，全部完成后按原顺序组装；每个元素加通用保险丝，
+    自带超时预算的渲染器（self_budgeted）不套。
 
     Args:
         segments: parser.parse() 输出的 Segment 列表。
@@ -290,10 +294,8 @@ async def build_chain(
             continue
         if _recipe_for(spec, cfg).image:
             indices.append(i)
-            coros.append(asyncio.wait_for(
-                _render_one(_renderer_for(type(seg), spec, renderers), seg),
-                _RENDER_TIMEOUT,
-            ))
+            coro = _render_one(_renderer_for(type(seg), spec, renderers), seg)
+            coros.append(coro if spec.self_budgeted else asyncio.wait_for(coro, _RENDER_TIMEOUT))
 
     # 并发执行
     if coros:
