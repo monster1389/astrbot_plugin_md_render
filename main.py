@@ -16,7 +16,7 @@ from astrbot.api.event import (
     ResultContentType,
     filter,
 )
-from astrbot.api.star import Context, Star, StarTools, register
+from astrbot.api.star import Context, Star, StarTools
 
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
@@ -31,12 +31,6 @@ from render.tempstore import start as _start_cleaner  # noqa: E402
 from render.tempstore import stop as _stop_cleaner  # noqa: E402
 
 
-@register(
-    "astrbot_plugin_md_render",
-    "monster1389",
-    "Markdown 渲染插件",
-    "1.5.3",
-)
 class MdRenderPlugin(Star):
     """将 QQ 消息中的 markdown 代码块、HTML 文档、Mermaid 图表、表格、数学表达式渲染为图片。
 

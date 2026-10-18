@@ -2,6 +2,14 @@
 
 本文件记录 astrbot_plugin_md_render 的版本更新。
 
+## [1.6.1] - 2026-10-18
+
+### 变更
+- **插件元数据声明支持 16 个平台适配器**（`metadata.yaml` 的 `support_platforms`），不再只写 `aiocqhttp`。插件本身没有平台分支：拦截 `OnDecoratingResultEvent`，产出 `Plain` / `Image` / `File` 三类组件，能力边界由适配器的出口决定——图片类模式在全部内置适配器可用，故全部声明。
+- 未声明 `wecom_ai_bot`（企微智能机器人）和 `weixin_official_account`（公众号）：这两个适配器只处理 `At`/`Plain`/`Image`/`Record`，丢弃 `File` 组件，`.md` 文件模式（`渲染且md文件` / `仅md文件`）会静默丢内容。
+- 未声明 `vocechat` / `matrix`：对应适配器是社区插件，出口能力未核对。
+- **删掉 `main.py` 的 `@register(...)` 装饰器**（写的是 `1.5.3`）。`Star.__init_subclass__` 在类定义时已经注册插件，装饰器只往那个条目里写 `name/author/desc/version/repo`，而加载时这几个字段全部被 `metadata.yaml` 覆盖（`star_manager` 注释：“yaml 文件的元数据优先”）；它还额外抛一条 `DeprecationWarning`。删掉后元数据只有一处来源。
+
 ## [1.6.0] - 2026-10-18
 
 ### 变更
