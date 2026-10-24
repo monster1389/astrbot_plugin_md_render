@@ -142,66 +142,37 @@ mermaid.ink 连不上，插件回退为源码。把 Mermaid 的模式改成 `仅
 
 ## 架构
 
-```mermaid
-flowchart LR
-  subgraph 入口
-    main["main.py<br/>插件入口"]
-  end
-  subgraph 流水线
-    chain["chain.py<br/>配方 + 分组 + 拆条 + 管线"]
-  end
-  subgraph 元素域
-    parser["parser.py<br/>解析 + 类型"]
-    tdom["table_domain.py<br/>表格子域"]
-    ifmt["inline_format.py<br/>格式状态机"]
-    mdc["md_cleaner.py<br/>清洗"]
-  end
-  subgraph 渲染器
-    code_r["code_render.py"]
-    table_r["table_render.py"]
-    expr_r["expr_render.py"]
-    html_r["html_render.py<br/>pytakumi"]
-    mmd_r["mermaid_render.py<br/>mermaid.ink"]
-  end
-  subgraph 基础设施
-    font["font.py<br/>字体服务"]
-    cfg["config.py<br/>配置"]
-    ts["tempstore.py<br/>临时文件"]
-    deliv["deliver.py<br/>送达"]
-  end
+实线是数据流，虚线是依赖。
 
-  main --> chain
-  main --> cfg
-  main --> deliv
-  main --> font
-  main --> ts
-  chain --> code_r
-  chain --> cfg
-  chain --> expr_r
-  chain --> html_r
-  chain --> mdc
-  chain --> mmd_r
-  chain --> parser
-  chain --> tdom
-  chain --> table_r
-  chain --> ts
-  code_r --> font
-  parser --> tdom
-  mdc --> ifmt
-  mdc --> cfg
-  deliv --> chain
-  deliv --> ts
-  deliv --> cfg
-  table_r --> tdom
-  table_r --> font
-  tdom --> ifmt
+```mermaid
+flowchart TB
+  main["main.py<br/>入口 · 拆链 · 留尾"]
+
+  bridge["产物与桥接<br/>artifacts · bridge<br/>Text / Picture / SourceFile"]
+  parse["解析与清洗<br/>parser · table_domain · inline_format · md_cleaner"]
+  reg["元素注册表<br/>elements"]
+  chain["流水线<br/>chain：分组 · 并发 · 按序产出"]
+  rend["渲染器<br/>code · table · expr · html · mermaid"]
+  out["出图口<br/>renderer · canvas · png"]
+  deliver["送达<br/>deliver：逐条发出，末条留尾"]
+  infra["基础设施<br/>font · config · tempstore"]
+
+  main -->|"组件 → 文本"| bridge
+  bridge -->|文本| parse
+  parse -->|片段| chain
+  chain -->|产物| bridge
+  bridge -->|组件| deliver
+  chain --> rend
+  rend -->|"code / table / html"| out
+  reg -.-> chain
+  out -.-> infra
 
   classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
   classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
   classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
-  class main,chain deep;
-  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv mid;
-  class font,cfg,ts leaf;
+  class main,deliver deep;
+  class bridge,parse,reg,chain,rend,out mid;
+  class infra leaf;
 ```
 
-深色为深模块，接口小、实现厚。中色为元素域与渲染器。浅色为基础设施叶模块。
+深色为入口与出口，中色为元素域与渲染器，浅色为基础设施。图只画到职责层：一个节点可能对应多个文件，逐文件职责看代码。
