@@ -1,184 +1,200 @@
-"""表格渲染测试。"""
-from unittest.mock import MagicMock, patch
+"""表格渲染测试（pytakumi + CSS 折行）。"""
+import io
+import os
 
+import pytest
+from PIL import Image
+
+from render.html_render import init_html
+from render.parser import parse
 from render.table_domain import RichCell, Span, Table
-from render.table_render import render_table
+from render.table_domain import table_to_markdown
+from render.table_render import (
+    _MAX_WIDTH,
+    _Layout,
+    _cell,
+    _decorate,
+    _document,
+    _natural_widths,
+    _resources,
+    plan_widths,
+    render_table,
+)
+
+_NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 
-def _cell(text: str) -> RichCell:
-    return RichCell(spans=[Span(text=text)])
+@pytest.fixture(scope="module", autouse=True)
+def _renderer() -> None:
+    """表格共用 html_render 的渲染器，测试前先初始化。"""
+    init_html(1000)
+
+
+def _text_cell(text: str, align: str = "") -> RichCell:
+    return RichCell(spans=[Span(text=text)], align=align)
+
+
+def _layout_of(table: Table) -> _Layout:
+    face, font = _resources()
+    cache: dict = {}
+    return _Layout(
+        header=[_cell(c, font, cache) for c in table.headers],
+        rows=[[_cell(c, font, cache) for c in row] for row in table.rows],
+        n_cols=max([len(table.headers)] + [len(r) for r in table.rows] + [1]),
+    )
+
+
+def _first_table(md: str) -> Table:
+    return next(s for s in parse(md) if isinstance(s, Table))
+
+
+class TestPlanWidths:
+    """列宽分配：三档。"""
+
+    def test_short_table_keeps_natural(self):
+        """整表放得下：按自然宽返回，不拉满上限。"""
+        natural = [100, 120, 140]
+        assert plan_widths(natural, [80, 80, 80]) == natural
+
+    def test_short_column_not_compressed(self):
+        """一列超长：短列保持自然宽，长列吃掉余额。"""
+        widths = plan_widths([200, 4000], [200, 100])
+        assert widths[0] == 200
+        assert widths[1] > widths[0] * 3
+        assert sum(widths) <= _MAX_WIDTH
+
+    def test_many_columns_compressed(self):
+        """列太多：等比压缩，总宽不超上限，各列等宽。"""
+        widths = plan_widths([600] * 8, [100] * 8)
+        assert sum(widths) <= _MAX_WIDTH
+        assert len(set(widths)) == 1
+
+    def test_header_raises_floor(self):
+        """表头比内容宽时，保底宽按表头算。"""
+        widths = plan_widths([50, 4000], [200, 100])
+        assert widths[0] == 50
+
+    def test_empty(self):
+        assert plan_widths([], []) == []
+
+
+class TestCellSerialization:
+    """单元格 → HTML：转义、格式嵌套、公式图。"""
+
+    def test_escapes_markup(self):
+        _, font = _resources()
+        cell = _cell(_text_cell("<div> & 引号"), font, {})
+        assert "&lt;div&gt;" in cell.html
+        assert "&amp;" in cell.html
+        assert "<div>" not in cell.html
+
+    def test_escapes_link_url(self):
+        _, font = _resources()
+        span = Span(text="链接", link_url='https://x.y/?a=1&b="2"')
+        html = _cell(RichCell(spans=[span]), font, {})
+        assert 'href="https://x.y/?a=1&amp;b=&quot;2&quot;"' in html.html
+
+    def test_nested_format_order(self):
+        span = Span(text="x", bold=True, italic=True, code=True)
+        assert _decorate("x", span) == "<b><i><code>x</code></i></b>"
+
+    def test_empty_cell_keeps_height(self):
+        _, font = _resources()
+        cell = _cell(RichCell(spans=[Span(text="")]), font, {})
+        assert cell.html == "&nbsp;"
+
+    def test_math_rendered_as_image(self, monkeypatch):
+        """格内 $...$ 变成 img，纯货币符号不触发渲染。"""
+        calls: list[str] = []
+        image = Image.new("RGBA", (40, 20), (0, 0, 0, 255))
+        monkeypatch.setattr(
+            "render.table_render.render_expr_image",
+            lambda src, **kw: calls.append(src) or image,
+        )
+        _, font = _resources()
+        _cell(_text_cell("$x^2+1$"), font, {})
+        _cell(_text_cell("$5"), font, {})
+        assert calls == ["x^2+1"]
+
+
+class TestAlignment:
+    """markdown 表格对齐（:---: 等）。"""
+
+    def test_parse_sets_align(self):
+        md = "| a | b | c |\n|:---|:---:|---:|\n| 1 | 2 | 3 |\n"
+        table = _first_table(md)
+        assert [c.align for c in table.headers] == ["left", "center", "right"]
+        assert [c.align for c in table.rows[0]] == ["left", "center", "right"]
+
+    def test_document_writes_text_align(self):
+        table = _first_table("| a | b |\n|:---:|---:|\n| 1 | 2 |\n")
+        layout = _layout_of(table)
+        natural, header = _natural_widths(layout)
+        html = _document(layout, plan_widths(natural, header))
+        assert "text-align:center" in html
+        assert "text-align:right" in html
+
+    def test_no_align_specified(self):
+        table = _first_table("| a | b |\n|---|---|\n| 1 | 2 |\n")
+        layout = _layout_of(table)
+        natural, header = _natural_widths(layout)
+        html = _document(layout, plan_widths(natural, header))
+        assert "text-align" not in html
 
 
 class TestRenderTable:
-    @patch("render.table_render.ImageDraw")
-    @patch("render.table_render.Image")
-    @patch("render.font.get_font")
-    def test_renders_simple_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
-        """简单表格渲染返回字节数据。"""
-        mock_font = MagicMock()
-        mock_font.getbbox.return_value = (0, 0, 100, 20)
-        mock_get_font.return_value = mock_font
-        mock_img = MagicMock()
-        mock_img.resize.return_value = mock_img
-        mock_img_cls.new.return_value = mock_img
+    """真实渲染冒烟。"""
 
-        def save_side_effect(buf, *args, **kwargs):
-            buf.write(b"fake_png_data")
-        mock_img.save.side_effect = save_side_effect
-
-        tbl = Table(
-            headers=[_cell("姓名"), _cell("年龄")],
-            rows=[[_cell("张三"), _cell("20")], [_cell("李四"), _cell("25")]],
+    def test_long_cell_wraps_within_max_width(self):
+        if not os.path.exists(_NOTO):
+            pytest.skip("容器内无 Noto CJK 字体")
+        table = Table(
+            headers=[_text_cell("配置项"), _text_cell("说明")],
+            rows=[[_text_cell("表格"), _text_cell("很长的说明文字。" * 40)]],
         )
+        png = render_table(table)
+        assert png.startswith(b"\x89PNG")
+        image = Image.open(io.BytesIO(png))
+        assert _MAX_WIDTH - 6 <= image.width <= _MAX_WIDTH
+        assert image.height > 100
 
-        png_bytes = render_table(tbl)
-
-        assert isinstance(png_bytes, bytes)
-        assert len(png_bytes) > 0
-        mock_img.save.assert_called_once()
-
-    @patch("render.table_render.ImageDraw")
-    @patch("render.table_render.Image")
-    @patch("render.font.get_font")
-    def test_empty_table(self, mock_get_font, mock_img_cls, mock_draw_cls):
-        """空表格也能渲染。"""
-        mock_font = MagicMock()
-        mock_font.getbbox.return_value = (0, 0, 100, 20)
-        mock_get_font.return_value = mock_font
-        mock_img = MagicMock()
-        mock_img.resize.return_value = mock_img
-        mock_img_cls.new.return_value = mock_img
-
-        def save_side_effect(buf, *args, **kwargs):
-            buf.write(b"fake_png_data")
-        mock_img.save.side_effect = save_side_effect
-
-        tbl = Table(headers=[_cell("A")], rows=[])
-
-        png_bytes = render_table(tbl)
-
-        assert isinstance(png_bytes, bytes)
-        assert len(png_bytes) > 0
-        mock_img.save.assert_called_once()
-
-    @patch("render.table_render.ImageDraw")
-    @patch("render.table_render.Image")
-    @patch("render.font.get_font")
-    def test_rich_cell_with_bold_and_italic(self, mock_get_font, mock_img_cls, mock_draw_cls):
-        """包含加粗和斜体 Span 的富文本单元格正确渲染。"""
-        mock_font = MagicMock()
-        mock_font.getbbox.return_value = (0, 0, 100, 20)
-        mock_get_font.return_value = mock_font
-        mock_img = MagicMock()
-        mock_img.resize.return_value = mock_img
-        mock_img_cls.new.return_value = mock_img
-
-        def save_side_effect(buf, *args, **kwargs):
-            buf.write(b"fake_png_data")
-        mock_img.save.side_effect = save_side_effect
-
-        tbl = Table(
-            headers=[_cell("格式"), _cell("内容")],
-            rows=[
-                [
-                    RichCell(spans=[Span(text="加粗", bold=True)]),
-                    RichCell(spans=[Span(text="普通"), Span(text="斜体", italic=True)]),
-                ]
-            ],
+    def test_short_table_shrinks_canvas(self):
+        if not os.path.exists(_NOTO):
+            pytest.skip("容器内无 Noto CJK 字体")
+        table = Table(
+            headers=[_text_cell("姓名"), _text_cell("年龄")],
+            rows=[[_text_cell("张三"), _text_cell("20")]],
         )
+        image = Image.open(io.BytesIO(render_table(table)))
+        assert image.width < 400
 
-        png_bytes = render_table(tbl)
-
-        assert isinstance(png_bytes, bytes)
-        assert len(png_bytes) > 0
-        mock_img.save.assert_called_once()
-
-    @patch("render.table_render.ImageDraw")
-    @patch("render.table_render.Image")
-    @patch("render.font.get_font")
-    def test_all_span_formats(self, mock_get_font, mock_img_cls, mock_draw_cls):
-        """全部 5 种格式 Span 均能渲染。"""
-        mock_font = MagicMock()
-        mock_font.getbbox.return_value = (0, 0, 100, 20)
-        mock_get_font.return_value = mock_font
-        mock_img = MagicMock()
-        mock_img.resize.return_value = mock_img
-        mock_img_cls.new.return_value = mock_img
-
-        def save_side_effect(buf, *args, **kwargs):
-            buf.write(b"fake_png_data")
-        mock_img.save.side_effect = save_side_effect
-
-        tbl = Table(
-            headers=[_cell("类型")],
-            rows=[
-                [RichCell(spans=[
-                    Span(text="粗", bold=True),
-                    Span(text="斜", italic=True),
-                    Span(text="删", strike=True),
-                    Span(text="码", code=True),
-                    Span(text="链", link_url="https://x.com"),
-                ])],
-            ],
-        )
-
-        png_bytes = render_table(tbl)
-
-        assert isinstance(png_bytes, bytes)
-        assert len(png_bytes) > 0
-        mock_img.save.assert_called_once()
-
-
-class TestTableCellMath:
-    """格内 $...$ 渲染为公式图。"""
-
-    @patch("render.table_render.render_expr_image")
-    def test_cell_expr_rendered(self, mock_expr):
-        """公式单元格调用表达式渲染，而不是画源码。"""
-        from PIL import Image as PILImage
-
-        mock_expr.return_value = PILImage.new("RGBA", (30, 20), (0, 0, 0, 255))
-        tbl = Table(headers=[_cell("公式")], rows=[[_cell("$x^2$")]])
-
-        png_bytes = render_table(tbl)
-
-        assert isinstance(png_bytes, bytes)
-        assert len(png_bytes) > 0
-        mock_expr.assert_called_once()
-        assert mock_expr.call_args.args[0] == "x^2"
-
-    @patch("render.table_render.render_expr_image")
-    def test_currency_not_rendered(self, mock_expr):
-        """孤立的 $ 货币符号不当作公式。"""
-        tbl = Table(headers=[_cell("价格")], rows=[[_cell("$5")]])
-        render_table(tbl)
-
-        mock_expr.assert_not_called()
+    def test_header_only_table(self):
+        if not os.path.exists(_NOTO):
+            pytest.skip("容器内无 Noto CJK 字体")
+        png = render_table(Table(headers=[_text_cell("A")], rows=[]))
+        assert png.startswith(b"\x89PNG")
 
 
 class TestTableToText:
     """table_to_markdown 从 RichCell 重建 markdown。"""
 
     def test_plain_cell(self):
-        from render.table_domain import table_to_markdown
-        t = Table(headers=[_cell("A")], rows=[[_cell("1")]])
+        t = Table(headers=[_text_cell("A")], rows=[[_text_cell("1")]])
         result = table_to_markdown(t)
         assert "| A |" in result
         assert "| 1 |" in result
 
     def test_bold_cell(self):
-        from render.table_domain import table_to_markdown
         t = Table(
-            headers=[_cell("H")],
+            headers=[_text_cell("H")],
             rows=[[RichCell(spans=[Span(text="bold", bold=True)])]],
         )
         result = table_to_markdown(t)
         assert "| **bold** |" in result
 
     def test_mixed_cell(self):
-        from render.table_domain import table_to_markdown
         t = Table(
-            headers=[_cell("H")],
+            headers=[_text_cell("H")],
             rows=[[RichCell(spans=[
                 Span(text="b", bold=True),
                 Span(text="i", italic=True),

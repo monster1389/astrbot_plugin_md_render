@@ -7,6 +7,7 @@ parse_table 是 markdown-it token 流的唯一入口，格内占位符还原
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,8 +29,14 @@ class Span:
 
 @dataclass
 class RichCell:
-    """富文本单元格。"""
+    """富文本单元格。
+
+    Attributes:
+        spans: 富文本片段列表。
+        align: 列对齐方式（left/center/right）；空串表示未指定。
+    """
     spans: list[Span]
+    align: str = ""
 
 
 @dataclass
@@ -152,6 +159,22 @@ def _cell_spans(tokens: list[Token], restore: Callable[[str], str]) -> list[Span
     return spans
 
 
+_ALIGN_RE = re.compile(r"text-align:\s*(left|center|right)")
+
+
+def _token_align(token: Token) -> str:
+    """从 th_open/td_open 的 style 属性里取列对齐。
+
+    Args:
+        token: th_open 或 td_open token。
+
+    Returns:
+        left/center/right；未指定时为空串。
+    """
+    match = _ALIGN_RE.search(token.attrs.get("style", ""))
+    return match.group(1) if match else ""
+
+
 def parse_table(tokens: list[Token], start_idx: int, restore: Callable[[str], str]) -> tuple[Table, int]:
     """从 token 流中解析一个表格。
 
@@ -178,12 +201,13 @@ def parse_table(tokens: list[Token], start_idx: int, restore: Callable[[str], st
             k = j + 1
             while k < len(tokens) and tokens[k].type != "tr_close":
                 if tokens[k].type in ("th_open", "td_open"):
+                    align = _token_align(tokens[k])
                     cell_tokens: list[Token] = []
                     k += 1
                     while k < len(tokens) and tokens[k].type not in ("th_close", "td_close"):
                         cell_tokens.append(tokens[k])
                         k += 1
-                    row.append(RichCell(spans=_cell_spans(cell_tokens, restore)))
+                    row.append(RichCell(spans=_cell_spans(cell_tokens, restore), align=align))
                 k += 1
             if in_head and not headers:
                 headers = row
