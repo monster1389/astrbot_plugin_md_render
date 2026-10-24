@@ -20,21 +20,20 @@ from PIL import ImageFont
 
 # AstrBot 官方镜像自带（fonts-noto-cjk）
 _NOTO_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-# 非官方镜像可能装了文泉驿
-_WQY = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
 # 无中文字形，仅作最后保底（中文会显示为豆腐块）
 _DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
-# 等宽候选：Noto ttc 第 7 个 face 为 Noto Sans Mono CJK SC，文泉驿第 1 个为 Mono
+# 不列文泉驿：不少镜像上那个路径躺着的是 Noto 的副本，写死的 face 序号
+# 会指向日文/韩文比例体，静默出怪字形比没有退路更糟。
+
+# 等宽候选：Noto ttc 第 7 个 face 为 Noto Sans Mono CJK SC
 _MONO_CANDIDATES: tuple[tuple[str, int], ...] = (
     (_NOTO_CJK, 7),
-    (_WQY, 1),
     (_DEJAVU, 0),
 )
-# 正文候选：Noto ttc 第 2 个 face 为比例体 Noto Sans CJK SC，文泉驿第 0 个为比例体
+# 正文候选：Noto ttc 第 2 个 face 为比例体 Noto Sans CJK SC
 _BODY_CANDIDATES: tuple[tuple[str, int], ...] = (
     (_NOTO_CJK, 2),
-    (_WQY, 0),
     (_DEJAVU, 0),
 )
 
@@ -59,8 +58,6 @@ class FontSpec:
 _FAMILY_NAMES: dict[FontSpec, str] = {
     FontSpec(_NOTO_CJK, 7): "Noto Sans Mono CJK SC",
     FontSpec(_NOTO_CJK, 2): "Noto Sans CJK SC",
-    FontSpec(_WQY, 1): "WenQuanYi Micro Hei Mono",
-    FontSpec(_WQY, 0): "WenQuanYi Micro Hei",
     FontSpec(_DEJAVU, 0): "DejaVu Sans Mono",
 }
 # 手动放置的字体按文件名推断族名

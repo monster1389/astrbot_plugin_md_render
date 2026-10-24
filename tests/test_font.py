@@ -15,7 +15,6 @@ from render.font import (
 )
 
 NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-WQY = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
 SARASA = "/data/fonts/SarasaMonoSC-Regular.ttf"
 
 
@@ -26,7 +25,7 @@ def _only(*existing: str):
 
 class TestFindFontSpec:
     def setup_method(self):
-        _font._font_spec = None
+        _font._measure_spec = None
         _font._measure_cache.clear()
 
     def test_discovers_noto_mono_face(self):
@@ -34,12 +33,6 @@ class TestFindFontSpec:
         with patch("os.path.exists", side_effect=_only(NOTO)):
             _font.init_font(None)
             assert _font.find_font_spec() == FontSpec(NOTO, 7)
-
-    def test_discovers_wqy_mono_face(self):
-        """没有 Noto 时取文泉驿等宽，即第 1 个 face。"""
-        with patch("os.path.exists", side_effect=_only(WQY)):
-            _font.init_font(None)
-            assert _font.find_font_spec() == FontSpec(WQY, 1)
 
     def test_returns_none_when_none_found(self):
         """没有可用字体时返回 None。"""
@@ -60,12 +53,6 @@ class TestBodySpec:
         with patch("os.path.exists", side_effect=_only(NOTO)):
             _font.init_font(None)
             assert body_spec() == FontSpec(NOTO, 2)
-
-    def test_wqy_proportional_face(self):
-        """没有 Noto 时取文泉驿比例体，即第 0 个 face。"""
-        with patch("os.path.exists", side_effect=_only(WQY)):
-            _font.init_font(None)
-            assert body_spec() == FontSpec(WQY, 0)
 
     def test_manual_mono_font_is_not_body_candidate(self):
         """手动字体是等宽的，没系统字体时正文退回到它，而不是凭空缺席。"""

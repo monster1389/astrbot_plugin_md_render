@@ -1,21 +1,12 @@
 # 字体
 
-插件在启动时按顺序发现可用字体，取第一个存在的。优先等宽且含中文字形。
+插件要两种中文字体：画代码要等宽的（每个字母一样宽），画表格要比例的（字宽跟着内容走）。两者都在系统里自动发现，AstrBot 官方镜像自带 Noto Sans CJK，一个文件里两样都有，通常什么都不用做。
 
-| 顺序 | 字体 | 位置 |
-|------|------|------|
-| 1 | Sarasa Mono SC | `<数据目录>/plugin_data/astrbot_plugin_md_render/fonts/SarasaMonoSC-Regular.ttf` |
-| 2 | Noto Sans Mono CJK SC | 系统 `NotoSansCJK-Regular.ttc` 的第 7 个 face |
-| 3 | WenQuanYi Micro Hei Mono | 系统 `wqy-microhei.ttc` 的第 1 个 face |
-| 4 | DejaVu Sans Mono | 系统自带，无中文字形 |
-
-AstrBot 官方镜像自带 `fonts-noto-cjk`，因此第 2 项通常直接命中，不需要配置。
-
-ttc 集合必须指定 face：第 0 个 face 是比例字体，按路径直接取会让代码列对齐歪掉。插件已经带上了 face 参数。
+想换代码的观感可以装 Sarasa Mono SC：中英文严格 2:1 等宽，比系统等宽体更整齐。它只影响代码块与公式——表格正文要比例体，Sarasa 是等宽的，不参与。
 
 ## 安装 Sarasa Mono SC
 
-中英文严格 2:1 等宽，代码观感比系统字体整齐。以下命令在 AstrBot 所在机器执行，完成后重启 AstrBot。
+以下命令在 AstrBot 所在机器执行，完成后重启 AstrBot。
 
 ```bash
 # 1) 下载压缩包，约 68MB。GitHub 直连不稳时走镜像，镜像失败换注释里的直连
@@ -39,6 +30,19 @@ docker restart astrbot
 
 其它中文字体也可以：重命名为 `SarasaMonoSC-Regular.ttf` 放进同一目录。插件不会在运行时下载或解压字体。
 
-## HTML 文档的字体
+## 确认命中了哪个
 
-HTML 文档渲染走另一条路径，按字体名注册，优先级为 Noto Sans CJK SC、WenQuanYi Micro Hei、上表第 1 项。
+```bash
+docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -c "
+from render import font
+font.init_font('/AstrBot/data/plugin_data/astrbot_plugin_md_render')
+print('代码:', font.find_font_spec(), font.font_family(font.find_font_spec()))
+print('表格:', font.body_spec(), font.body_family())
+"
+```
+
+代码那行指向 `fonts/SarasaMonoSC-Regular.ttf` 说明手动字体生效；两行都指向系统 Noto 说明没放手动字体，或放的位置不对。
+
+## HTML 文档
+
+HTML 文档的字体由文档自己的 CSS 决定，插件只负责把找到的字体都注册进去。所以文档里写 `font-family: "Noto Sans CJK SC"` 或 `"Sarasa Mono SC"` 都能命中；族名写错不会报错，会静默回退到默认字体。
