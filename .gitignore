@@ -215,6 +215,4 @@ __marimo__/
 # Plugin runtime data files
 data/
 
-# Superpowers design docs
-docs/superpowers/
 docs/diagnose/

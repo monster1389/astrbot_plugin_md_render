@@ -1,219 +1,85 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+AstrBot 插件：拦截 QQ 消息里的 markdown 代码块、HTML 文档、Mermaid 图表、表格与数学表达式，渲染成图片或文件后替换到消息链，并清洗剩余文本中的格式标记。管道位置 `OnDecoratingResultEvent`（priority=1000），在 RespondStage 之前改 `result.chain`。
 
-## 项目概述
+## 文档分工（先读这段）
 
-AstrBot 插件，拦截 QQ 消息中的 markdown **代码块**、**HTML 文档**、**Mermaid 图表**、**表格**和**数学表达式**，渲染为图片/文件后替换到消息链，并清洗剩余文本中的 markdown 格式标记（加粗、斜体、删除线等）。
+**只写机器查不出来的东西**：意图、约束、为什么这么做、查不到的操作步骤、词汇的裁决。
+`ls`、`git log`、`requirements.txt`、`_conf_schema.json`、代码 docstring 能回答的，不写第二份。
 
-管道位置：`OnDecoratingResultEvent`（priority=1000），在 RespondStage 之前修改 `result.chain`。
+| 文档 | 负责 | 该放 | 不该放 |
+|---|---|---|---|
+| `README.md` | 使用者视角 | 装法、AstrBot 侧前置设置、每种模式的语义、外发声明、字体放置步骤 | 模块名、内部类型、变更历史、测试 |
+| `GLOSSARY.md` | 领域语言 | 本项目独有的名词与命名裁决（每条 1–2 句，带 `_Avoid_`） | 机制描述、类名、模块路径、计数、默认值 |
+| `CLAUDE.md`（本文） | agent 守则与不变量 | 命令、环境约束、编码规范、不可违反的架构约束 | 模块目录树、逐文件职责表、依赖清单、版本号、测试数、变更流水 |
+| `CHANGELOG.md` | 时间轴 | 对使用者有影响的行为、依赖、平台变化 | 现状描述——它本来就该腐烂 |
+| `docs/fonts.md` | 查不到的操作步骤 | 字体从哪来、放哪、怎么验证 | 候选字体清单与 ttc face 序号 |
+| `_conf_schema.json` | 配置的机器真相 | 默认值、可选值、UI 文案 | 语义解释 |
+| 代码 docstring | 接口契约 | Args / Returns / Raises、不变量、一行“为什么” | 教程、历史、跨模块全景 |
+| `docs/adr/` | 难逆 + 反直觉 + 真有取舍的决定 | 见文末 | 每次重构都写一条 |
 
-## 常用命令
-
-插件运行在 Docker 容器 `astrbot`（soulter/astrbot）内，容器内路径 `/AstrBot/data/plugins/astrbot_plugin_md_render` 与宿主机本目录 bind mount 同步。**宿主机不再维护 .venv**，所有检查/测试/装包一律 docker exec 进容器执行，一条命令完成：
+## 操作
 
 ```bash
 # 代码检查
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot ruff check .
 
-# 运行全部测试
+# 全部测试
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest
 
-# 运行单个测试文件/用例
+# 单个测试文件 / 单个用例
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest tests/test_xxx.py
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest tests/test_xxx.py::test_func_name -v
 
-# 安装/更新依赖（容器内全局环境，测试框架 pytest/ruff 已预装）
+# 安装/更新依赖（容器内全局环境）
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pip install -r requirements.txt
 
-# 改动生效：重启 astrbot 容器
+# 改动生效
 docker restart astrbot
 ```
 
+容器名 `astrbot`，容器内路径 `/AstrBot/data/plugins/astrbot_plugin_md_render` 与宿主机本目录 bind mount 同步。
+
 ## 环境约束
 
-- **所有 Python 操作一律在 `astrbot` 容器内执行**：用 `docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot <命令>`，宿主机不建 .venv、不向宿主机/系统 Python 装包，subagent 同样必须如此
-- **容器内即插件运行环境**（Python 3.12 全局环境）：`pip install` 直接作用于容器全局，只安装 requirements.txt 声明的依赖，不随意升降级容器内已装包
-- **依赖已在 requirements.txt 声明**：新增依赖先加文件再 install
-- **代码改动后需重启容器生效**：`docker restart astrbot`（改配置/装依赖后同理）
+- **所有 Python 操作一律在 `astrbot` 容器内执行**：宿主机不建 .venv、不向宿主机/系统 Python 装包，subagent 同样如此
+- **容器内即插件运行环境**：`pip install` 直接作用于容器全局，只装 `requirements.txt` 声明的依赖，不随意升降级已装包
+- **新增依赖先写进 `requirements.txt` 再装**（`astrbot` 的传递依赖不算已声明）
+- **代码/配置/依赖改动后重启容器**才生效
 
 ## 编码规范
 
-- **无兜底**：错误直接暴露，不静默吞掉
+- **无兜底**：错误直接暴露，不静默吞掉；唯一例外是架构不变量第 8 条（渲染失败降级为产物），且降级必须打日志
 - **日志**：一律 `from astrbot.api import logger`，不用标准库 `logging.getLogger(__name__)`（插件市场审核要求）
 - **无死代码、无冗余**：不写用不到的代码，高度复用、解耦
 - **Docstring**：中文，Google Style（`"""一句话概述。\n\nArgs:\n    x: ...\nReturns:\n    ...\n"""`）
 - **类型注解**：所有函数签名必须有完整类型注解
-- **测试**：ruff 零告警 + pytest 覆盖核心逻辑
-- **Superpowers 文档**：不提交到 git（已在 `.gitignore` 排除 `docs/superpowers/`）
-- **Superpowers spec**：用中文写，写完自审后交出（自查：TBD/占位符、内部矛盾、范围过大、歧义表述）
+- **测试**：ruff 零告警 + pytest 覆盖核心逻辑；换实现时重写测试面，旧接口的测试跟着删，不留两层
 
-## 架构
+## 架构不变量
 
-### 入口
+1. **三段管线**：解析 → 流水线 → 送达。`main.py` 只接线，不放业务判断。
+2. **产物是唯一出口形态**：`Text` / `Picture` / `SourceFile`（`render/artifacts.py`）。流水线与送达之间只传产物，不传消息组件。
+3. **组件只在桥接层**：`render/bridge.py` 是全插件唯一 import `astrbot.api.message_components` 的模块。新增产物类型必须同时改桥接层，否则翻译会抛错（这是有意的）。
+4. **元素注册表是唯一登记处**：加一种 markdown 元素只改 `render/elements.py`（渲染函数、两种文本配方、配置身份、清洗开关、是否块级、是否自带超时预算）。分组、模式查表、产物前缀、配置读取、日志汇总全部派生自它，不得另维护并行表。
+5. **配置载入即校验**：模式名与默认值来自注册表；未知配置项或该元素不可达的模式，`load_config` 直接 `ValueError`，不猜、不降级。
+6. **渲染器替换走覆盖层**：`plan_chain` / `build_chain` 的 `renderers` 参数是替换与测试的缝，生产传 `None`。渲染器签名是「segment → PNG bytes」，同步或协程都行。
+7. **超时预算分层**：本机渲染器共用一个 15s 保险丝；自带预算的渲染器（走外部 HTTP）不套它，自己管超时与重试。
+8. **失败必须降级为产物**：渲染失败 → 该模式可写文件则出 `.md`，否则回退原文文本。异常绝不抛给 RespondStage。
+9. **临时文件只有一个主人**：`render/tempstore.py` 管命名、删除、刷新与 TTL 清扫；落盘路径随产物走，不从组件属性反推。
+10. **严格保序**：任何并发优化都不得让后面的消息越过前面的组。
+11. **流式结束不处理**：`STREAMING_FINISH` 一律跳过——流式阶段已把原文发出，再渲染会经送达重复发送。
+12. **测试在容器内跑，优先真组件**：`tests/conftest.py` 能 import 真 AstrBot 组件就不装桩；渲染器测试经 `renderers` 覆盖层注入假的，`no_quantize` 夹具只关量化。
 
-`main.py` — AstrBot Star Plugin，类继承 `Star`，`@register` 注册。
+## 配置
 
-### 插件生命周期
+`_conf_schema.json` 是默认值与可选值的唯一真相；各模式的语义见 README。
+代码侧：`load_config(raw)` 把根级开关与 `渲染` / `分段` / `清洗` 三块转成 dataclass，元素模式按注册表校验。
 
-```
-__init__(context) → initialize() → [事件处理] → terminate()
-```
+## 内置技能
 
-### 事件处理链
+`skills/show-me/` 由 AstrBot 扫描 `<plugin>/skills/<name>/SKILL.md` 自动加载；frontmatter 只读 `description`（`disable-model-invocation` 之类无效）。`data/skills/` 下同名技能优先，会遮住插件内置版本。
 
-```
-LLM/Star 生成消息
-    │
-    ▼
-OnDecoratingResultEvent (priority=1000)  ← 本插件
-    │  收集所有 Plain 文本，拼接后解析为 Segment 列表
-    │  按配置模式将各 Segment 渲染为 Image(png) / File(.md) / Plain
-    │  流水线逐条产出：除末条外就绪即发，末条经 result.chain 留尾
-    │
-    ▼
-RespondStage 发送最终 chain
-```
+## 设计文档
 
-### 模块结构
-
-```mermaid
-flowchart LR
-  subgraph 入口
-    main["main.py<br/>插件入口"]
-  end
-  subgraph 组装
-    chain["chain.py<br/>分组 + 拆条 + 管线"]
-    elem["elements.py<br/>元素注册表"]
-  end
-  subgraph 元素域
-    parser["parser.py<br/>解析 + 类型"]
-    tdom["table_domain.py<br/>表格子域"]
-    ifmt["inline_format.py<br/>格式状态机"]
-    mdc["md_cleaner.py<br/>清洗"]
-  end
-  subgraph 渲染器
-    code_r["code_render.py"]
-    table_r["table_render.py"]
-    expr_r["expr_render.py"]
-    html_r["html_render.py<br/>pytakumi"]
-    mmd_r["mermaid_render.py<br/>mermaid.ink"]
-  end
-  subgraph 基础设施
-    font["font.py<br/>字体服务"]
-    cfg["config.py<br/>配置"]
-    ts["tempstore.py<br/>临时文件"]
-    deliv["deliver.py<br/>送达"]
-  end
-
-  main --> chain
-  main --> cfg
-  main --> deliv
-  main --> font
-  main --> ts
-  chain --> code_r
-  chain --> cfg
-  chain --> elem
-  chain --> expr_r
-  chain --> html_r
-  chain --> mdc
-  chain --> mmd_r
-  chain --> parser
-  chain --> tdom
-  chain --> table_r
-  chain --> ts
-  code_r --> font
-  parser --> tdom
-  mdc --> ifmt
-  mdc --> cfg
-  deliv --> chain
-  deliv --> ts
-  deliv --> cfg
-  table_r --> tdom
-  table_r --> font
-  tdom --> ifmt
-  cfg --> elem
-  main --> elem
-  ts --> elem
-  elem --> code_r
-  elem --> expr_r
-  elem --> html_r
-  elem --> mdc
-  elem --> mmd_r
-  elem --> table_r
-
-  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
-  classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
-  classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
-  class main,chain deep;
-  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv,elem mid;
-  class font,cfg,ts leaf;
-```
-
-深色 = 深模块（接口小、实现厚）· 中色 = 元素域/渲染器 · 浅色 = 基础设施叶模块。
-
-### 配置与基础设施
-
-配置与基础设施各自独立成模块：
-- `render/elements.py` — 元素注册表：每种元素一条 `Element`（渲染函数、两种文本配方、配置身份、清洗开关、是否块级、是否自带超时预算），`FAMILIES` 是元素族视图。加一种元素只改这里；分组、模式查表、产物前缀、配置读取、日志汇总都由它派生
-- `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造；`RenderConfig.modes` 是元素族键 → 模式，模式名与默认值来自注册表，未知配置项或不可达模式载入即 `ValueError`
-- `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_spec()` / `get_font(size)`，返回 `FontSpec(path, index)`；候选顺序 `data_dir/fonts/SarasaMonoSC-Regular.ttf`（手动放置，不自动下载）→ 系统 Noto Sans Mono CJK SC（`NotoSansCJK-Regular.ttc` 第 7 个 face）→ 文泉驿等宽（第 1 个 face）→ DejaVu Sans Mono，按字号缓存。ttc 必须带 face，第 0 个是比例字体
-- `render/tempstore.py` — 临时文件命名 `build_temp_path(data_dir, prefix, ext)` / 删除 / 刷新 + 后台按 TTL 清扫
-
-### 模块
-
-| 模块 | 职责 |
-|------|------|
-| `render/parser.py` | markdown-it-py 解析，输出 CodeBlock/HtmlDoc/MermaidBlock/Table/InlineExpr/BlockExpr/Segment/Divider + 元素原文序列化（codeblock/expr 的 to_markdown/to_plain）。块级公式只认行首 `$$` 或同行内成对；代码围栏与行内代码里的 `$` 不参与识别 |
-| `render/table_domain.py` | Span/RichCell/Table 模型 + 表格解析/还原（`parse_table`/`table_to_markdown`/`table_to_plain`） |
-| `render/inline_format.py` | 行内格式状态机 `FormatState`/`advance`，表格与清洗共用 |
-| `render/code_render.py` | pygments → pillow 渲染代码块，返回 PNG bytes |
-| `render/table_render.py` | Pillow 手绘表格为 PNG bytes，支持格内加粗/斜体/删除线/行内代码/链接混排，格内 `$...$` 画成公式图 |
-| `render/expr_render.py` | Typst 渲染 LaTeX（tylax 做 LaTeX→Typst 转换）。`render_expr_image` 返回透明底图像供表格嵌入，`render_expr` 返回 PNG bytes；转换或编译失败抛给上层回退原文 |
-| `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
-| `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池）；进程内单通道串行（服务拒绝并发），单张 10s，4xx 不重试、5xx 重试一次，失败抛给上层改发 `.md` |
-| `render/elements.py` | 元素注册表 `ELEMENTS`（类型 → Element）+ `FAMILIES`（族键 → 配置身份）+ `recipe_for`/`text_for`/`writes_file`。加一种元素只登记一处 |
-| `render/chain.py` | 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（本机渲染器 15s 保险丝，自管预算的 mermaid 不套） |
-| `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
-| `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
-| `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫；产物前缀由元素注册表的族键派生 |
-| `render/font.py` | 字体发现（`FontSpec` 含 ttc face index）+ 按字号缓存 |
-| `render/config.py` | `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + 配置加载（模式集由注册表驱动，载入时校验） |
-
-### 关键 API
-
-- `StarTools.get_data_dir("astrbot_plugin_md_render")` — 获取插件数据目录，临时文件放 `temp/` 子目录
-- `event.get_result().chain` — 获取/修改消息链
-- `@filter.on_decorating_result(priority=1000)` — 注册装饰结果事件
-
-### 依赖
-
-`pygments`, `pillow`, `markdown-it-py`, `typst`, `tylax`, `pytakumi`
-
-`skills/show-me/` 是插件内置技能：AstrBot 扫描 `<plugin>/skills/<name>/SKILL.md`，frontmatter 只读 `description`（`disable-model-invocation` 无效）。同名技能时 `data/skills/` 优先，会遮住插件内置版本。
-
-### 配置
-
-通过 AstrBot 内置配置系统，`_conf_schema.json` 提供一个根级开关和三个嵌套配置块，`load_config` 按 `raw["仅处理模型回复"]` / `raw["渲染"]` / `raw["分段"]` / `raw["清洗"]` 构造：
-
-**根级**：
-- 仅处理模型回复：默认关。开启后 `on_decorating_result` 只在 `result.is_model_result()` 时处理，其它插件与内置命令的消息原样放过。无论开关如何，`STREAMING_FINISH` 结果一律跳过：流式阶段已把原文发出，RespondStage 不会再发这条结果，继续渲染会让 `deliver` 重复发送前几条
-
-**渲染**（`raw["渲染"]`）：
-- 代码块：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染且md文件）
-- 表格：同上五选项（默认 渲染图像）
-- 表达式：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像）
-- Mermaid：不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件（默认 渲染图像），图片走 mermaid.ink（需联网，串行）；渲染失败那张改发 `.md`，由 QQ 原生渲染（客户端只认部分图型）
-- HTML：不处理 / 渲染图像 / 渲染且保留原文（默认 渲染图像），只处理含 `<!DOCTYPE`/`<html>` 的完整文档
-- HTML 宽度（像素）：默认 1000，高度按内容自适应
-- 临时文件存活（分钟）：3=默认保留 3 分钟，0=即时删除，-1=永久保留
-
-**分段**（`raw["分段"]`）：
-- 分隔线 / 连续换行：不处理 / 切分（默认切分）
-- 发送延时：开/关（默认开），切分后多条消息间随机延时 1~3 秒防风控
-
-**清洗**（`raw["清洗"]`）：15 个 bool 开关。加粗/斜体/删除线/行内代码/链接/标题/无序列表/有序列表/引用/图片/分隔线/连续换行默认开（去除格式标记、压缩空行）；代码块/表格/表达式默认关（仅元素以文本保留时生效）。清洗基于 markdown-it-py token 树，颜表情中的 `*` `_` `~` 不会被误杀
-
-### 设计文档
-
-历史设计文档见 `docs/superpowers/`（如存在），注意部分内容可能过时，以当前代码为准。
+ADR 只在三个条件同时成立时写：难逆、不读就反直觉、真有替代方案被否掉；写进 `docs/adr/`（首次需要时创建）。
