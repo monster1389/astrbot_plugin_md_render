@@ -1,4 +1,5 @@
 """管道编排测试：消息链 → 渲染流水线 → 待发送消息列表。"""
+import pytest
 import asyncio
 import time
 from unittest.mock import MagicMock, patch
@@ -7,6 +8,9 @@ from astrbot.api.message_components import Plain, Image
 
 from render.parser import CodeBlock
 from render.config import CleanConfig, RenderConfig, SegmentConfig
+
+# 这些用例测链组装与顺序，fake 渲染器返回假字节，量化由 test_png.py 覆盖
+pytestmark = pytest.mark.usefixtures("no_quantize")
 
 
 def _make_cfg(**overrides):

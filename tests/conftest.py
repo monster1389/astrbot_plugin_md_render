@@ -1,7 +1,11 @@
 """测试配置 — 注入项目根目录与 mock 依赖。"""
+import io
 import sys
 import types
 from pathlib import Path
+
+import pytest
+from PIL import Image
 
 # 将项目根目录加入 sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -63,3 +67,26 @@ _mock_msg_comp.Plain = MockPlain
 _mock_msg_comp.Image = MockImage
 _mock_msg_comp.File = MockFile
 sys.modules["astrbot.api.message_components"] = _mock_msg_comp
+
+
+def _png(color: tuple[int, int, int]) -> bytes:
+    """生成 1×1 真实 PNG 字节。"""
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color).save(buf, "PNG")
+    return buf.getvalue()
+
+
+# 真实 PNG，供需要走完渲染出口的 fake 渲染器使用
+PNG_1PX = _png((30, 30, 30))
+
+
+@pytest.fixture
+def no_quantize(monkeypatch) -> None:
+    """关掉 chain 出口的量化。
+
+    标了 ``usefixtures("no_quantize")`` 的用例测的是消息链组装与顺序，
+    不是 PNG 编码；它们的 fake 渲染器返回的是假字节，量化会拒绝。
+    编码本身由 test_png.py 覆盖。
+    """
+    monkeypatch.setattr("render.chain.quantize", lambda png: png)
+

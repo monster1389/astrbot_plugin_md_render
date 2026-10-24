@@ -35,6 +35,7 @@ from render.parser import (
     expr_to_plain,
     parse,
 )
+from render.png import quantize
 from render.table_domain import Table, table_to_markdown, table_to_plain
 from render.table_render import render_table
 from render.tempstore import build_temp_path
@@ -163,18 +164,23 @@ def _renderer_for(
 
 
 async def _render_one(renderer: Callable[[Any], Any], seg: Any) -> bytes:
-    """执行单个渲染器：协程渲染器直接 await，同步渲染器转线程池。
+    """执行单个渲染器并统一压缩产物。
+
+    协程渲染器直接 await，同步渲染器转线程池；量化是 CPU 活，同样丢线程池，
+    不阻塞事件循环。所有渲染器（含远端 mermaid）都经过这里，产物归一在一处。
 
     Args:
         renderer: 渲染函数，同步返回 PNG 字节或协程返回 PNG 字节。
         seg: 元素 segment。
 
     Returns:
-        渲染出的 PNG 字节。
+        量化后的 PNG 字节。
     """
     if iscoroutinefunction(renderer):
-        return await renderer(seg)
-    return await asyncio.to_thread(renderer, seg)
+        png = await renderer(seg)
+    else:
+        png = await asyncio.to_thread(renderer, seg)
+    return await asyncio.to_thread(quantize, png)
 
 
 def _recipe_for(spec: ElementSpec, cfg: RenderConfig) -> ModeSpec:

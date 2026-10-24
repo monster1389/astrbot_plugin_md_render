@@ -3,11 +3,21 @@ import io
 import os
 
 import pytest
-
 from PIL import Image
 
-from render.html_render import extract_styles, init_html, render_document, render_html
+from render import renderer
+from render.html_render import extract_styles, render_html
 from render.parser import HtmlDoc
+
+_NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+
+
+@pytest.fixture(autouse=True)
+def _init() -> None:
+    """每个用例前初始化渲染器，结束后恢复默认宽度。"""
+    renderer.init(None, 1000)
+    yield
+    renderer.init(None, 1000)
 
 
 class TestExtractStyles:
@@ -26,7 +36,7 @@ class TestExtractStyles:
 class TestRenderHtml:
     def test_renders_document(self):
         """完整文档渲染出 PNG，宽度等于配置值。"""
-        init_html(360)
+        renderer.init(None, 360)
         doc = HtmlDoc(
             code=(
                 "<!DOCTYPE html><html><head><style>body{background:#0d1117;color:#e6edf3}</style>"
@@ -37,30 +47,16 @@ class TestRenderHtml:
         assert isinstance(png, bytes)
         assert png.startswith(b"\x89PNG")
         assert Image.open(io.BytesIO(png)).width == 360
-        init_html(1000)
-
-
-class TestRenderDocument:
-    """共享渲染器入口：宽度可控。"""
-
-    def test_width_is_respected(self):
-        init_html(1000)
-        png = render_document("<html><body>文本</body></html>", 360)
-        assert Image.open(io.BytesIO(png)).width == 360
-        init_html(1000)
 
 
 class TestFontRegistration:
-    """注册不传 name：ttc 自带的各族名都可寻址。"""
-
-    _NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    """字体由 renderer.init 统一注册：ttc 自带的各族名都可寻址。"""
 
     def test_sc_and_jp_faces_differ(self):
         """SC 与 JP 的渲染结果必须不同，否则说明 ttc 被归成了单一 face。"""
-        if not os.path.exists(self._NOTO):
+        if not os.path.exists(_NOTO):
             pytest.skip("容器内无 Noto CJK 字体")
-        init_html(1000)
         body = "<html><body>直骨次角</body></html>"
-        sc = render_document(body, 400, "body{font-family:'Noto Sans CJK SC';font-size:40px}")
-        jp = render_document(body, 400, "body{font-family:'Noto Sans CJK JP';font-size:40px}")
+        sc = renderer.render_page(body, "body{font-family:'Noto Sans CJK SC';font-size:40px}", width=400)
+        jp = renderer.render_page(body, "body{font-family:'Noto Sans CJK JP';font-size:40px}", width=400)
         assert sc != jp

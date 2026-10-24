@@ -17,10 +17,10 @@ from PIL import Image
 
 from astrbot.api import logger
 from render.font import find_font_spec, font_family, font_search_dir
+from render.theme import BG
 
-# VS Code dark theme 配色
+# 公式文字色；底色取自主题（与代码块、表格同源）
 _FONT_COLOR = "#9CDCFE"
-_BG_COLOR = "#1E1E1E"
 
 # 独立公式图的留白；表格内嵌公式不留白，由表格排版加间距
 _PAD = 10
@@ -216,7 +216,7 @@ def render_expr(expr: object) -> bytes:
     image = render_expr_image(latex_src, color=_FONT_COLOR)
 
     w, h = image.size
-    result = Image.new("RGB", (w + _PAD * 2, h + _PAD * 2), _BG_COLOR)
+    result = Image.new("RGB", (w + _PAD * 2, h + _PAD * 2), BG)
     result.paste(image, (_PAD, _PAD), image)
 
     buf = BytesIO()

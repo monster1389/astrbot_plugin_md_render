@@ -3,35 +3,35 @@
 格内文本按列宽自动折行，画布宽度封顶，避免整张图被客户端等比缩小后字号不可读。
 不用 ``<table>``：takumi 0.1.5 忽略 ``<col>`` / ``<colgroup>`` 的宽度（写百分比或
 px 都会被均分），所以表格用 flex 手搭，列宽以像素写死在格子上。
+
+字体与底色都来自公共层：比例体族名与度量字体取自 ``render.font``，底色取自
+``render.theme``，出图交给 ``render.renderer``。
 """
 from __future__ import annotations
 
 import base64
 import html as htmllib
-import os
-import threading
 from dataclasses import dataclass, field
 from io import BytesIO
 
 from PIL import Image, ImageFont
 
+from render import font, renderer
 from render.expr_render import render_expr_image
-from render.font import find_font_spec, font_family
-from render.html_render import render_document
 from render.parser import InlineExpr, split_inline_math
 from render.table_domain import RichCell, Span, Table
+from render.theme import BG, page
 
-# 颜色预设（与代码块、公式图的深色底一致）
-_RGB_BG = (26, 26, 46)
-_RGB_FONT = (220, 220, 230)
-_RGB_HEADER_BG = (40, 40, 65)
-_RGB_GRID = (80, 80, 110)
-_RGB_BOLD = (255, 210, 160)
-_RGB_ITALIC = (180, 210, 240)
-_RGB_STRIKE = (140, 140, 150)
-_RGB_CODE_BG = (50, 50, 70)
-_RGB_CODE = (150, 220, 150)
-_RGB_LINK = (120, 180, 255)
+# 颜色预设（深色底与代码块、公式图同源，底色另有 _BG 指向 theme）
+_FONT = "#dcdce6"
+_HEADER_BG = "#282841"
+_GRID = "#50506e"
+_BOLD = "#ffd2a0"
+_ITALIC = "#b4d2f0"
+_STRIKE = "#8c8c96"
+_CODE_BG = "#323246"
+_CODE = "#96dc96"
+_LINK = "#78b4ff"
 
 _FONT_SIZE = 34   # 正文字号（px）
 _PAD_X = 18       # 单元格左右内边距（px）
@@ -41,26 +41,6 @@ _CODE_PAD = 4     # 行内代码左右内边距（px）
 _MAX_WIDTH = 1080  # 画布宽度上限
 _FLOOR_MAX = 300   # 短列阈值：自然宽不超过它的列不参与压缩
 _TWO_CHARS = _FONT_SIZE * 2
-
-# 首选比例中文字体：Noto Sans CJK SC。等宽 face 留给代码块，表格正文要比例。
-_NOTO_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-_NOTO_FACE = 2          # ttc 内的 Noto Sans CJK SC
-_NOTO_FAMILY = "Noto Sans CJK SC"
-
-
-@dataclass(frozen=True)
-class _Face:
-    """测量与渲染共用的字体身份。
-
-    Attributes:
-        path: 字体文件路径。
-        index: ttc 集合内的 face 序号。
-        family: CSS 引用的族名。
-    """
-
-    path: str
-    index: int
-    family: str
 
 
 @dataclass
@@ -93,49 +73,6 @@ class _Layout:
     n_cols: int = 1
 
 
-_lock = threading.Lock()
-_face: _Face | None = None
-_measure_font: ImageFont.FreeTypeFont | None = None
-
-
-def _rgb_hex(color: tuple[int, int, int]) -> str:
-    """把 RGB 元组转成 CSS 十六进制颜色。"""
-    return "#{:02x}{:02x}{:02x}".format(*color)
-
-
-def _read_face() -> _Face:
-    """确定表格使用的字体：优先比例中文，系统缺失时回退 font.py 的发现结果。
-
-    Returns:
-        字体身份。
-
-    Raises:
-        RuntimeError: 找不到任何中文字体。
-    """
-    if os.path.exists(_NOTO_CJK):
-        return _Face(_NOTO_CJK, _NOTO_FACE, _NOTO_FAMILY)
-    spec = find_font_spec()
-    if spec is None:
-        raise RuntimeError("未找到中文字体，表格无法渲染")
-    return _Face(spec.path, spec.index, font_family(spec) or "sans-serif")
-
-
-def _resources() -> tuple[_Face, ImageFont.FreeTypeFont]:
-    """惰性确定字体身份与测量字体。线程安全。
-
-    Returns:
-        (字体身份, 测量用 Pillow 字体)。
-    """
-    global _face, _measure_font
-    with _lock:
-        if _face is None or _measure_font is None:
-            face = _read_face()
-            _measure_font = ImageFont.truetype(face.path, _FONT_SIZE, index=face.index)
-            _face = face
-    assert _face is not None and _measure_font is not None
-    return _face, _measure_font
-
-
 def _css(family: str) -> str:
     """拼出表格样式表。
 
@@ -146,40 +83,47 @@ def _css(family: str) -> str:
         CSS 文本。
     """
     return f"""
-body {{ margin: 0; background: {_rgb_hex(_RGB_BG)};
+body {{ margin: 0; background: {BG};
         font-family: "{family}"; font-size: {_FONT_SIZE}px; line-height: 1.5; }}
 .rows {{ display: flex; flex-direction: column;
-         border-left: {_BORDER}px solid {_rgb_hex(_RGB_GRID)};
-         border-top: {_BORDER}px solid {_rgb_hex(_RGB_GRID)}; }}
+         border-left: {_BORDER}px solid {_GRID};
+         border-top: {_BORDER}px solid {_GRID}; }}
 .row {{ display: flex; }}
 .cell {{ box-sizing: border-box; flex: none;
-         border-right: {_BORDER}px solid {_rgb_hex(_RGB_GRID)};
-         border-bottom: {_BORDER}px solid {_rgb_hex(_RGB_GRID)};
-         padding: {_PAD_Y}px {_PAD_X}px; color: {_rgb_hex(_RGB_FONT)};
+         border-right: {_BORDER}px solid {_GRID};
+         border-bottom: {_BORDER}px solid {_GRID};
+         padding: {_PAD_Y}px {_PAD_X}px; color: {_FONT};
          word-break: break-word; overflow-wrap: anywhere; }}
-.hd {{ background: {_rgb_hex(_RGB_HEADER_BG)}; color: {_rgb_hex(_RGB_BOLD)}; }}
-b {{ color: {_rgb_hex(_RGB_BOLD)}; }}
-i {{ color: {_rgb_hex(_RGB_ITALIC)}; }}
-s {{ color: {_rgb_hex(_RGB_STRIKE)}; }}
-code {{ background: {_rgb_hex(_RGB_CODE_BG)}; color: {_rgb_hex(_RGB_CODE)};
+.hd {{ background: {_HEADER_BG}; color: {_BOLD}; }}
+b {{ color: {_BOLD}; }}
+i {{ color: {_ITALIC}; }}
+s {{ color: {_STRIKE}; }}
+code {{ background: {_CODE_BG}; color: {_CODE};
         padding: 0 {_CODE_PAD}px; }}
-a {{ color: {_rgb_hex(_RGB_LINK)}; text-decoration: underline; }}
+a {{ color: {_LINK}; text-decoration: underline; }}
 """
 
 
-def _span_color(span: Span) -> tuple[int, int, int]:
-    """根据 Span 格式状态返回对应文字颜色。"""
+def _span_color(span: Span) -> str:
+    """根据 Span 格式状态返回对应文字颜色。
+
+    Args:
+        span: 富文本片段。
+
+    Returns:
+        CSS 颜色值。
+    """
     if span.code:
-        return _RGB_CODE
+        return _CODE
     if span.link_url:
-        return _RGB_LINK
+        return _LINK
     if span.strike:
-        return _RGB_STRIKE
+        return _STRIKE
     if span.bold:
-        return _RGB_BOLD
+        return _BOLD
     if span.italic:
-        return _RGB_ITALIC
-    return _RGB_FONT
+        return _ITALIC
+    return _FONT
 
 
 def _decorate(inner: str, span: Span) -> str:
@@ -227,7 +171,7 @@ def _cell(cell: RichCell, font: ImageFont.FreeTypeFont,
     parts: list[str] = []
     width = _PAD_X * 2 + _BORDER * 2
     for span in cell.spans:
-        color = _rgb_hex(_span_color(span))
+        color = _span_color(span)
         for part in split_inline_math(span.text):
             if isinstance(part, InlineExpr):
                 key = (part.expr, color)
@@ -349,7 +293,7 @@ def _document(layout: _Layout, widths: list[int]) -> str:
     """
     head = _row_html(layout.header, widths, "hd") if layout.header else ""
     body = "".join(_row_html(row, widths, "") for row in layout.rows)
-    return f'<html><body><div class="rows">{head}{body}</div></body></html>'
+    return page(f'<div class="rows">{head}{body}</div>')
 
 
 def render_table(table: Table) -> bytes:
@@ -361,15 +305,17 @@ def render_table(table: Table) -> bytes:
     Returns:
         PNG 图片字节。
     """
-    face, font = _resources()
+    measure = font.measure_font(_FONT_SIZE)
     math_cache: dict[tuple[str, str], Image.Image] = {}
     layout = _Layout(
-        header=[_cell(c, font, math_cache) for c in table.headers],
-        rows=[[_cell(c, font, math_cache) for c in row] for row in table.rows],
+        header=[_cell(c, measure, math_cache) for c in table.headers],
+        rows=[[_cell(c, measure, math_cache) for c in row] for row in table.rows],
         n_cols=max([len(table.headers)] + [len(r) for r in table.rows] + [1]),
     )
     natural, header = _natural_widths(layout)
     widths = plan_widths(natural, header)
-    return render_document(
-        _document(layout, widths), max(sum(widths) + _BORDER, 1), _css(face.family)
+    return renderer.render_page(
+        _document(layout, widths),
+        _css(font.body_family() or "sans-serif"),
+        width=max(sum(widths) + _BORDER, 1),
     )

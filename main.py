@@ -22,11 +22,10 @@ _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
+from render import renderer  # noqa: E402
 from render.chain import Pipeline, plan_chain  # noqa: E402
 from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
-from render.font import init_font  # noqa: E402
-from render.html_render import init_html  # noqa: E402
 from render.tempstore import start as _start_cleaner  # noqa: E402
 from render.tempstore import stop as _stop_cleaner  # noqa: E402
 
@@ -50,9 +49,8 @@ class MdRenderPlugin(Star):
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
         temp_dir = os.path.join(data_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
-        init_font(str(data_dir))
         self.cfg, self.seg_cfg, self.clean_cfg = load_config(self.config)
-        init_html(self.cfg.html_width)
+        renderer.init(str(data_dir), self.cfg.html_width)
         _start_cleaner(str(data_dir), self.cfg.temp_ttl)
         logger.info("Markdown 渲染插件已启动")
 

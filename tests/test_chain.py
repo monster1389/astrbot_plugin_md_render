@@ -2,11 +2,16 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from astrbot.api.message_components import Plain, Image, File as AstrFile
 
 from render.parser import BlockExpr, CodeBlock, Divider, HtmlDoc, InlineExpr, MermaidBlock, Segment
 from render.table_domain import RichCell, Span, Table
 from render.config import RenderConfig, SegmentConfig, CleanConfig
+
+# 这些用例测链组装与顺序，fake 渲染器返回假字节，量化由 test_png.py 覆盖
+pytestmark = pytest.mark.usefixtures("no_quantize")
 
 
 def _make_cfg(**overrides):

@@ -5,18 +5,18 @@ import os
 import pytest
 from PIL import Image
 
-from render.html_render import init_html
+from render import font, renderer
 from render.parser import parse
 from render.table_domain import RichCell, Span, Table
 from render.table_domain import table_to_markdown
 from render.table_render import (
+    _FONT_SIZE,
     _MAX_WIDTH,
     _Layout,
     _cell,
     _decorate,
     _document,
     _natural_widths,
-    _resources,
     plan_widths,
     render_table,
 )
@@ -25,9 +25,9 @@ _NOTO = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _renderer() -> None:
-    """表格共用 html_render 的渲染器，测试前先初始化。"""
-    init_html(1000)
+def _init() -> None:
+    """表格共用 renderer 的出图口，测试前先初始化。"""
+    renderer.init(None, 1000)
 
 
 def _text_cell(text: str, align: str = "") -> RichCell:
@@ -35,11 +35,11 @@ def _text_cell(text: str, align: str = "") -> RichCell:
 
 
 def _layout_of(table: Table) -> _Layout:
-    face, font = _resources()
+    measure = font.measure_font(_FONT_SIZE)
     cache: dict = {}
     return _Layout(
-        header=[_cell(c, font, cache) for c in table.headers],
-        rows=[[_cell(c, font, cache) for c in row] for row in table.rows],
+        header=[_cell(c, measure, cache) for c in table.headers],
+        rows=[[_cell(c, measure, cache) for c in row] for row in table.rows],
         n_cols=max([len(table.headers)] + [len(r) for r in table.rows] + [1]),
     )
 
@@ -82,16 +82,16 @@ class TestCellSerialization:
     """单元格 → HTML：转义、格式嵌套、公式图。"""
 
     def test_escapes_markup(self):
-        _, font = _resources()
-        cell = _cell(_text_cell("<div> & 引号"), font, {})
+        measure = font.measure_font(_FONT_SIZE)
+        cell = _cell(_text_cell("<div> & 引号"), measure, {})
         assert "&lt;div&gt;" in cell.html
         assert "&amp;" in cell.html
         assert "<div>" not in cell.html
 
     def test_escapes_link_url(self):
-        _, font = _resources()
+        measure = font.measure_font(_FONT_SIZE)
         span = Span(text="链接", link_url='https://x.y/?a=1&b="2"')
-        html = _cell(RichCell(spans=[span]), font, {})
+        html = _cell(RichCell(spans=[span]), measure, {})
         assert 'href="https://x.y/?a=1&amp;b=&quot;2&quot;"' in html.html
 
     def test_nested_format_order(self):
@@ -99,8 +99,8 @@ class TestCellSerialization:
         assert _decorate("x", span) == "<b><i><code>x</code></i></b>"
 
     def test_empty_cell_keeps_height(self):
-        _, font = _resources()
-        cell = _cell(RichCell(spans=[Span(text="")]), font, {})
+        measure = font.measure_font(_FONT_SIZE)
+        cell = _cell(RichCell(spans=[Span(text="")]), measure, {})
         assert cell.html == "&nbsp;"
 
     def test_math_rendered_as_image(self, monkeypatch):
@@ -111,9 +111,9 @@ class TestCellSerialization:
             "render.table_render.render_expr_image",
             lambda src, **kw: calls.append(src) or image,
         )
-        _, font = _resources()
-        _cell(_text_cell("$x^2+1$"), font, {})
-        _cell(_text_cell("$5"), font, {})
+        measure = font.measure_font(_FONT_SIZE)
+        _cell(_text_cell("$x^2+1$"), measure, {})
+        _cell(_text_cell("$5"), measure, {})
         assert calls == ["x^2+1"]
 
 
