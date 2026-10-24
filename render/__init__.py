@@ -4,7 +4,7 @@ parser         : 解析 Plain 文本，提取代码块/HTML 文档/Mermaid/表�
 artifacts      : 产物模型：纯文本/图片/源文件 + 待发送消息。
 bridge         : 消息组件 ↔ 产物（全插件唯一认识组件类型处）。
 renderer       : takumi 渲染器的唯一出图口（代码块/表格/HTML 文档共用）。
-theme          : 自绘图片共用的底色与页面骨架。
+canvas         : 自绘图共用的底色、字号阶梯、调色板与页面骨架。
 png            : 渲染产物统一量化。
 font           : 字体发现、族名、度量与注册清单。
 code_render    : pygments 高亮 + pytakumi 出图。
