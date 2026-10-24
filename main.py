@@ -22,7 +22,8 @@ _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)
 
-from render import renderer  # noqa: E402
+from render import bridge, renderer  # noqa: E402
+from render.artifacts import Artifact  # noqa: E402
 from render.chain import Pipeline, plan_chain  # noqa: E402
 from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
@@ -73,21 +74,37 @@ class MdRenderPlugin(Star):
             return
         data_dir = StarTools.get_data_dir("astrbot_plugin_md_render")
 
+        text, prelude = bridge.split_chain(result.chain)
         pipeline = await plan_chain(
-            result.chain, self.cfg, self.seg_cfg, self.clean_cfg, data_dir
+            text, self.cfg, self.seg_cfg, self.clean_cfg, data_dir
         )
         if pipeline is None:
             return
 
-        async def _send(comps: list) -> None:
+        def _wrap(artifacts: list[Artifact]) -> list:
+            """把产物翻成组件；原链的过境组件只随首条消息发出。
+
+            Args:
+                artifacts: 一条消息的产物列表。
+
+            Returns:
+                可直接发送的消息组件列表。
+            """
+            nonlocal prelude
+            components = prelude + bridge.to_components(artifacts)
+            prelude = []
+            return components
+
+        async def _send(artifacts: list[Artifact]) -> None:
             mc = MessageChain()
-            mc.chain = comps
+            mc.chain = _wrap(artifacts)
             await self.context.send_message(event.unified_msg_origin, mc)
 
         try:
-            result.chain = await deliver(_send, pipeline, self.seg_cfg)
+            tail = await deliver(_send, pipeline, self.seg_cfg)
         finally:
             pipeline.cancel()
+        result.chain = _wrap(tail)
 
         self._log_render_summary(pipeline)
 

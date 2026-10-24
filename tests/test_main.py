@@ -80,7 +80,9 @@ sys.modules["astrbot.api.event"] = _event
 import astrbot.api  # noqa: E402
 astrbot.api.AstrBotConfig = dict
 
-from astrbot.api.message_components import Plain  # noqa: E402
+from astrbot.api.message_components import Image, Plain  # noqa: E402
+
+from render.artifacts import Text  # noqa: E402
 
 
 def _make_event(
@@ -137,7 +139,7 @@ class TestPipelineWiring:
         """plan_chain 返回流水线 → deliver 消费，result.chain 取其返回。"""
         pipeline = MagicMock()
         pipeline.cancel = MagicMock()
-        tail = [Plain("尾条")]
+        tail = [Text(text="尾条")]
         original_chain = [Plain("原文")]
         event = _make_event(original_chain)
         event.unified_msg_origin = "napcat:FriendMessage:1"
@@ -157,14 +159,39 @@ class TestPipelineWiring:
             asyncio.run(plugin.on_decorating_result(event))
 
         mock_plan.assert_awaited_once_with(
-            original_chain, cfg, seg_cfg, None, "/tmp/test_md_render"
+            "原文", cfg, seg_cfg, None, "/tmp/test_md_render"
         )
         assert mock_deliver.await_count == 1
         assert mock_deliver.await_args[0][1] is pipeline
         assert mock_deliver.await_args[0][2] is seg_cfg
-        assert event.get_result.return_value.chain is tail
+        assert [c.text for c in event.get_result.return_value.chain] == ["尾条"]
         pipeline.cancel.assert_called_once()
         plugin._log_render_summary.assert_called_once_with(pipeline)
+
+    def test_original_components_prepend_first_message_once(self):
+        """原链非 Plain 组件只随首条发出的消息走，不重复进入末条。"""
+        foreign = Image.fromFileSystem("/tmp/user.png")
+        event = _make_event([foreign, Plain("第一段")])
+        event.unified_msg_origin = "napcat:FriendMessage:1"
+        context = MagicMock()
+        context.send_message = AsyncMock()
+        tail = [Text(text="尾条")]
+
+        async def fake_deliver(send, pipeline, seg_cfg):
+            await send([Text(text="第二条")])
+            return tail
+
+        with patch("main.plan_chain", AsyncMock(return_value=MagicMock())), \
+                patch("main.deliver", fake_deliver), \
+                patch("main.StarTools") as mock_tools:
+            mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
+            plugin = _make_plugin(context)
+            asyncio.run(plugin.on_decorating_result(event))
+
+        sent = context.send_message.await_args.args[1].chain
+        assert sent[0] is foreign
+        assert [c.text for c in sent[1:]] == ["第二条"]
+        assert [c.text for c in event.get_result.return_value.chain] == ["尾条"]
 
     def test_send_callback_routes_to_context(self):
         """deliver 收到的 send 回调经 context.send_message 发送。"""
@@ -174,14 +201,14 @@ class TestPipelineWiring:
         context.send_message = AsyncMock()
 
         with patch("main.plan_chain", AsyncMock(return_value=MagicMock())), \
-                patch("main.deliver", AsyncMock(return_value=[Plain("a")])) as mock_deliver, \
+                patch("main.deliver", AsyncMock(return_value=[Text(text="a")])) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
             plugin = _make_plugin(context)
             asyncio.run(plugin.on_decorating_result(event))
 
             send_fn = mock_deliver.await_args[0][0]
-            asyncio.run(send_fn([Plain("发送")]))
+            asyncio.run(send_fn([Text(text="发送")]))
 
         origin, mc = context.send_message.await_args.args
         assert origin == "napcat:FriendMessage:1"
@@ -206,7 +233,7 @@ class TestMessageScope:
         context.send_message = AsyncMock()
 
         with patch("main.plan_chain", AsyncMock(return_value=MagicMock())) as mock_plan, \
-                patch("main.deliver", AsyncMock(return_value=[Plain("x")])) as mock_deliver, \
+                patch("main.deliver", AsyncMock(return_value=[Text(text="x")])) as mock_deliver, \
                 patch("main.StarTools") as mock_tools:
             mock_tools.get_data_dir.return_value = "/tmp/test_md_render"
             plugin = _make_plugin(context)

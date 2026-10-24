@@ -1,22 +1,27 @@
-"""测试配置 — 注入项目根目录与 mock 依赖。"""
+"""测试配置 — 注入项目根目录，必要时为缺失的 AstrBot 补桩。"""
 import io
 import sys
 import types
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image as PILImage
 
 # 将项目根目录加入 sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Mock astrbot.api — AstrBot 框架运行时依赖，仅在插件宿主中可用
-if "astrbot" not in sys.modules:
+# 容器内 AstrBot 可 import：直接用真组件，桥接层因此被真类型覆盖。
+# 只有离开容器（没有 AstrBot）时才装桩，免得测试与真组件的行为分叉。
+try:
+    import astrbot.api  # noqa: F401
+    import astrbot.api.message_components  # noqa: F401
+except Exception:  # pragma: no cover - 只在非容器环境走到
     _astrbot = types.ModuleType("astrbot")
     _astrbot_api = types.ModuleType("astrbot.api")
 
     class _MockLogger:
         """静默日志桩，避免测试期间因缺少 logger 而崩溃。"""
+
         @staticmethod
         def warning(msg: str, *args, **kwargs) -> None:
             pass
@@ -34,45 +39,41 @@ if "astrbot" not in sys.modules:
     sys.modules["astrbot"] = _astrbot
     sys.modules["astrbot.api"] = _astrbot_api
 
-# Mock astrbot.api.message_components — 提供 Plain/Image/File 桩类
-class MockPlain:
-    def __init__(self, text: str = ""):
-        self.text = text
+    class MockPlain:
+        def __init__(self, text: str = ""):
+            self.text = text
 
-MockPlain.__name__ = "Plain"
-MockPlain.__qualname__ = "Plain"
+    class MockImage:
+        @staticmethod
+        def fromFileSystem(path: str):
+            img = MockImage()
+            img.file = path
+            img.path = path
+            return img
 
-class MockImage:
-    @staticmethod
-    def fromFileSystem(path: str):
-        img = MockImage()
-        img.file = path
-        img.path = path  # 与真实 Image.fromFileSystem 一致：path 为绝对路径
-        return img
+        @staticmethod
+        def fromBytes(data: bytes):
+            img = MockImage()
+            img.data = data
+            return img
 
-    @staticmethod
-    def fromBytes(data: bytes):
-        img = MockImage()
-        img.data = data
-        return img
+    class MockFile:
+        def __init__(self, name: str = "", file: str = ""):
+            self.name = name
+            self.file = file
+            self.file_ = file
 
-class MockFile:
-    def __init__(self, name: str = "", file: str = ""):
-        self.name = name
-        self.file = file
-        self.file_ = file  # 与真实 File 一致：file_ 为本地路径
-
-_mock_msg_comp = types.ModuleType("astrbot.api.message_components")
-_mock_msg_comp.Plain = MockPlain
-_mock_msg_comp.Image = MockImage
-_mock_msg_comp.File = MockFile
-sys.modules["astrbot.api.message_components"] = _mock_msg_comp
+    _mock_msg_comp = types.ModuleType("astrbot.api.message_components")
+    _mock_msg_comp.Plain = MockPlain
+    _mock_msg_comp.Image = MockImage
+    _mock_msg_comp.File = MockFile
+    sys.modules["astrbot.api.message_components"] = _mock_msg_comp
 
 
 def _png(color: tuple[int, int, int]) -> bytes:
     """生成 1×1 真实 PNG 字节。"""
     buf = io.BytesIO()
-    Image.new("RGB", (1, 1), color).save(buf, "PNG")
+    PILImage.new("RGB", (1, 1), color).save(buf, "PNG")
     return buf.getvalue()
 
 
@@ -84,9 +85,8 @@ PNG_1PX = _png((30, 30, 30))
 def no_quantize(monkeypatch) -> None:
     """关掉 chain 出口的量化。
 
-    标了 ``usefixtures("no_quantize")`` 的用例测的是消息链组装与顺序，
+    标了 ``usefixtures("no_quantize")`` 的用例测的是产物组装与顺序，
     不是 PNG 编码；它们的 fake 渲染器返回的是假字节，量化会拒绝。
     编码本身由 test_png.py 覆盖。
     """
     monkeypatch.setattr("render.chain.quantize", lambda png: png)
-

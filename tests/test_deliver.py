@@ -3,9 +3,7 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, patch
 
-from astrbot.api.message_components import Plain, Image, File
-
-from render.chain import Message
+from render.artifacts import Message, Picture, SourceFile, Text
 from render.config import SegmentConfig
 
 
@@ -31,8 +29,8 @@ class _FakePipeline:
 
     async def _list_iter(self, messages):
         last = len(messages) - 1
-        for index, chain in enumerate(messages):
-            yield Message(chain, is_tail=index == last)
+        for index, artifacts in enumerate(messages):
+            yield Message(artifacts, is_tail=index == last)
 
 
 class TestDeliver:
@@ -41,7 +39,7 @@ class TestDeliver:
         from render.deliver import deliver
 
         send = AsyncMock()
-        result = asyncio.run(deliver(send, _FakePipeline([[Plain("唯一")]]), _make_cfg(send_delay=False)))
+        result = asyncio.run(deliver(send, _FakePipeline([[Text("唯一")]]), _make_cfg(send_delay=False)))
         assert [c.text for c in result] == ["唯一"]
         send.assert_not_called()
 
@@ -51,7 +49,7 @@ class TestDeliver:
 
         send = AsyncMock()
         result = asyncio.run(
-            deliver(send, _FakePipeline([[Plain("A")], [Plain("B")]]), _make_cfg(send_delay=False))
+            deliver(send, _FakePipeline([[Text("A")], [Text("B")]]), _make_cfg(send_delay=False))
         )
         assert [c.text for c in result] == ["B"]
         send.assert_awaited_once()
@@ -62,7 +60,7 @@ class TestDeliver:
         from render.deliver import deliver
 
         send = AsyncMock()
-        messages = [[Plain("1")], [Plain("2")], [Plain("3")], [Plain("4")]]
+        messages = [[Text("1")], [Text("2")], [Text("3")], [Text("4")]]
         asyncio.run(deliver(send, _FakePipeline(messages), _make_cfg(send_delay=False)))
         assert send.await_count == 3
         assert [c.args[0][0].text for c in send.await_args_list] == ["1", "2", "3"]
@@ -72,7 +70,7 @@ class TestDeliver:
         from render.deliver import deliver
 
         send = AsyncMock()
-        messages = [[Plain("   ")], [Plain("正文")], [Plain("尾")]]
+        messages = [[Text("   ")], [Text("正文")], [Text("尾")]]
         asyncio.run(deliver(send, _FakePipeline(messages), _make_cfg(send_delay=False)))
         send.assert_awaited_once()
         assert send.await_args.args[0][0].text == "正文"
@@ -83,10 +81,10 @@ class TestDeliver:
 
         send = AsyncMock()
         messages = [
-            [Image.fromBytes(b"png")],
-            [Plain("文本")],
-            [Image.fromBytes(b"png")],
-            [Plain("尾")],
+            [Picture(png=b"png")],
+            [Text("文本")],
+            [Picture(png=b"png")],
+            [Text("尾")],
         ]
         ranges: list[tuple] = []
 
@@ -106,7 +104,7 @@ class TestDeliver:
         from render.deliver import deliver
 
         send = AsyncMock()
-        messages = [[Plain("A")], [Plain("B")]]
+        messages = [[Text("A")], [Text("B")]]
         with patch("render.deliver.random.uniform") as mock_uniform, \
                 patch("render.deliver.asyncio.sleep", new=AsyncMock()) as mock_sleep:
             asyncio.run(deliver(send, _FakePipeline(messages), _make_cfg(send_delay=False)))
@@ -118,7 +116,7 @@ class TestDeliver:
         from render.deliver import deliver
 
         send = AsyncMock()
-        messages = [[Plain("   ")], [Plain("正文")], [Plain("尾")]]
+        messages = [[Text("   ")], [Text("正文")], [Text("尾")]]
         with patch("render.deliver.random.uniform") as mock_uniform, \
                 patch("render.deliver.asyncio.sleep", new=AsyncMock()):
             asyncio.run(deliver(send, _FakePipeline(messages), _make_cfg(send_delay=True)))
@@ -135,10 +133,10 @@ class TestDeliver:
             sleeps.append(sec)
 
         async def slow_pipeline():
-            yield Message([Image.fromBytes(b"1")], is_tail=False)
+            yield Message([Picture(png=b"1")], is_tail=False)
             time.sleep(0.12)  # 模拟第 2 条渲染耗时（时钟照常前进）
-            yield Message([Image.fromBytes(b"2")], is_tail=False)
-            yield Message([Plain("尾")], is_tail=True)
+            yield Message([Picture(png=b"2")], is_tail=False)
+            yield Message([Text("尾")], is_tail=True)
 
         with patch("render.deliver._DELAY_RANGES", {True: (0.3, 0.3), False: (0.3, 0.3)}), \
                 patch("render.deliver.asyncio.sleep", new=fake_sleep):
@@ -159,10 +157,10 @@ class TestDeliver:
             sleeps.append(sec)
 
         async def slow_pipeline():
-            yield Message([Image.fromBytes(b"1")], is_tail=False)
+            yield Message([Picture(png=b"1")], is_tail=False)
             time.sleep(0.4)  # 渲染耗时已超过 0.3s 下限
-            yield Message([Image.fromBytes(b"2")], is_tail=False)
-            yield Message([Plain("尾")], is_tail=True)
+            yield Message([Picture(png=b"2")], is_tail=False)
+            yield Message([Text("尾")], is_tail=True)
 
         with patch("render.deliver._DELAY_RANGES", {True: (0.3, 0.3), False: (0.3, 0.3)}), \
                 patch("render.deliver.asyncio.sleep", new=fake_sleep):
@@ -176,13 +174,13 @@ class TestDeliver:
         """日志摘要：文本截断、图片文件名、文件名称、空文本。"""
         from render.deliver import _summarize
 
-        assert _summarize([Plain("短文本")]) == "文本「短文本」"
-        assert _summarize([Plain("x" * 30)]) == "文本「" + "x" * 24 + "…」"
-        assert _summarize([Plain("")]) == "空"
-        assert _summarize([Plain("   ")]) == "空"
-        assert _summarize([Image.fromFileSystem("/tmp/code_123.png")]) == "图片 code_123.png"
-        assert _summarize([Image.fromBytes(b"png")]) == "图片"
-        assert _summarize([File(name="x.md", file="/tmp/x.md")]) == "文件 x.md"
+        assert _summarize([Text("短文本")]) == "文本「短文本」"
+        assert _summarize([Text("x" * 30)]) == "文本「" + "x" * 24 + "…」"
+        assert _summarize([Text("")]) == "空"
+        assert _summarize([Text("   ")]) == "空"
+        assert _summarize([Picture(png=b"", path="/tmp/code_123.png")]) == "图片 code_123.png"
+        assert _summarize([Picture(png=b"png")]) == "图片"
+        assert _summarize([SourceFile(path="/tmp/x.md")]) == "文件 x.md"
 
 
 class TestTempFileLifecycle:
@@ -193,12 +191,12 @@ class TestTempFileLifecycle:
         from render.deliver import deliver
 
         temp_png = "/tmp/test_md_render/temp/code_20260819_114940_123456.png"
-        img = Image.fromFileSystem(temp_png)
+        img = Picture(png=b"", path=temp_png)
         send = AsyncMock()
         with patch("render.tempstore.os.remove") as mock_remove, \
                 patch("render.tempstore.os.utime") as mock_utime:
             asyncio.run(
-                deliver(send, _FakePipeline([[img], [Plain("尾")]]), _make_cfg(send_delay=False))
+                deliver(send, _FakePipeline([[img], [Text("尾")]]), _make_cfg(send_delay=False))
             )
         mock_remove.assert_called_once_with(temp_png)
         mock_utime.assert_not_called()
@@ -208,23 +206,23 @@ class TestTempFileLifecycle:
         from render.deliver import deliver
 
         temp_md = "/tmp/test_md_render/temp/table_20260819_114940_123456.md"
-        md = File(name="table.md", file=temp_md)
+        md = SourceFile(path=temp_md)
         send = AsyncMock()
         with patch("render.tempstore.os.remove") as mock_remove, \
                 patch("render.tempstore.os.utime") as mock_utime:
             result = asyncio.run(
-                deliver(send, _FakePipeline([[Plain("A")], [md]]), _make_cfg(send_delay=False))
+                deliver(send, _FakePipeline([[Text("A")], [md]]), _make_cfg(send_delay=False))
             )
         mock_remove.assert_not_called()
         mock_utime.assert_called_once_with(temp_md, None)
-        assert result[0] is md
+        assert result[0] == md
 
     def test_single_message_tail_touched_not_sent(self):
         """单条消息全部留尾：不发送、只刷新时间戳。"""
         from render.deliver import deliver
 
         temp_png = "/tmp/test_md_render/temp/code_20260819_114940_123456.png"
-        img = Image.fromFileSystem(temp_png)
+        img = Picture(png=b"", path=temp_png)
         send = AsyncMock()
         with patch("render.tempstore.os.remove") as mock_remove, \
                 patch("render.tempstore.os.utime") as mock_utime:
@@ -234,21 +232,5 @@ class TestTempFileLifecycle:
         send.assert_not_called()
         mock_remove.assert_not_called()
         mock_utime.assert_called_once_with(temp_png, None)
-        assert result[0] is img
+        assert result[0] == img
 
-    def test_ignores_foreign_files(self):
-        """非本插件临时文件（用户原始图片等）不被删除或刷新。"""
-        from render.deliver import deliver
-
-        foreign = Image.fromFileSystem("/tmp/user_photo.png")
-        temp_png = "/tmp/test_md_render/temp/expr_20260819_114940_123456.png"
-        send = AsyncMock()
-        with patch("render.tempstore.os.remove") as mock_remove, \
-                patch("render.tempstore.os.utime") as mock_utime:
-            asyncio.run(deliver(
-                send,
-                _FakePipeline([[foreign, Image.fromFileSystem(temp_png)], [Plain("尾")]]),
-                _make_cfg(send_delay=False),
-            ))
-        mock_remove.assert_called_once_with(temp_png)
-        mock_utime.assert_not_called()

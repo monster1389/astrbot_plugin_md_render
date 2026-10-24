@@ -4,8 +4,7 @@ import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
-from astrbot.api.message_components import Plain, Image
-
+from render.artifacts import Picture, SourceFile, Text
 from render.parser import CodeBlock
 from render.config import CleanConfig, RenderConfig, SegmentConfig
 from render.elements import FAMILIES
@@ -46,15 +45,15 @@ def _make_clean_cfg(**overrides):
     return CleanConfig(**defaults)
 
 
-def _collect(chain, cfg, seg_cfg, clean_cfg, data_dir="/tmp", renderers=None):
+def _collect(text, cfg, seg_cfg, clean_cfg, data_dir="/tmp", renderers=None):
     """建流水线并收集全部产出消息；plan_chain 返回 None 时同样返回 None。"""
     from render.chain import plan_chain
 
     async def _run():
-        pipeline = await plan_chain(chain, cfg, seg_cfg, clean_cfg, data_dir, renderers)
+        pipeline = await plan_chain(text, cfg, seg_cfg, clean_cfg, data_dir, renderers)
         if pipeline is None:
             return None
-        return [message.chain async for message in pipeline]
+        return [message.artifacts async for message in pipeline]
 
     return asyncio.run(_run())
 
@@ -62,19 +61,19 @@ def _collect(chain, cfg, seg_cfg, clean_cfg, data_dir="/tmp", renderers=None):
 class TestPlanChain:
     def test_empty_chain_returns_none(self):
         """空链返回 None。"""
-        assert _collect([], _make_cfg(), seg_cfg, None) is None
+        assert _collect("", _make_cfg(), seg_cfg, None) is None
 
     def test_blank_text_returns_none(self):
         """纯空白文本返回 None。"""
-        assert _collect([Plain("   ")], _make_cfg(), seg_cfg, None) is None
+        assert _collect("   ", _make_cfg(), seg_cfg, None) is None
 
     def test_noop_returns_none(self):
         """无元素、无清洗、无切分 → None（链原样保留）。"""
-        assert _collect([Plain("普通文本")], _make_cfg(), seg_cfg, None) is None
+        assert _collect("普通文本", _make_cfg(), seg_cfg, None) is None
 
     def test_cleaning_produces_messages(self):
         """仅清洗开启：产出清洗后的单条消息。"""
-        result = _collect([Plain("**加粗**")], _make_cfg(), seg_cfg, _make_clean_cfg())
+        result = _collect("**加粗**", _make_cfg(), seg_cfg, _make_clean_cfg())
         assert [c.text for c in result[0]] == ["加粗"]
 
     def test_keep_original_splits_text_and_image(self):
@@ -82,17 +81,17 @@ class TestPlanChain:
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code="渲染且保留原文")
         result = _collect(
-            [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: fake}
+            "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: fake}
         )
         assert len(result) == 2
         assert "x=1" in result[0][0].text
-        assert result[1][0].data == b"fake_png"
+        assert result[1][0].png == b"fake_png"
 
     def test_divider_split_returns_groups(self):
         """分隔线=切分：每组一条消息。"""
         seg_cfg = _make_seg_cfg(divider_mode="切分")
         result = _collect(
-            [Plain("第一段\n\n---\n\n第二段\n\n---\n\n第三段")], _make_cfg(), seg_cfg, None
+            "第一段\n\n---\n\n第二段\n\n---\n\n第三段", _make_cfg(), seg_cfg, None
         )
         assert len(result) == 3
         assert result[0][0].text.strip() == "第一段"
@@ -102,7 +101,7 @@ class TestPlanChain:
     def test_blank_line_split_returns_groups(self):
         """连续换行=切分：空行分隔的段落各一条。"""
         seg_cfg = _make_seg_cfg(blank_line_mode="切分")
-        result = _collect([Plain("第一段\n\n第二段\n\n第三段")], _make_cfg(), seg_cfg, None)
+        result = _collect("第一段\n\n第二段\n\n第三段", _make_cfg(), seg_cfg, None)
         assert len(result) == 3
         assert [c.text for c in result[0]] == ["第一段"]
         assert [c.text for c in result[1]] == ["第二段"]
@@ -113,30 +112,21 @@ class TestPlanChain:
         fake = MagicMock(side_effect=lambda seg: b"png_" + seg.code.encode())
         cfg = _make_cfg(code="渲染且保留原文")
         result = _collect(
-            [Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")],
+            "正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```",
             cfg, seg_cfg, None, renderers={CodeBlock: fake},
         )
         assert len(result) == 5
         assert result[0][0].text.strip() == "正文第一行"
         assert "x=1" in result[1][0].text
-        assert result[2][0].data == b"png_x=1"
+        assert result[2][0].png == b"png_x=1"
         assert "y=2" in result[3][0].text
-        assert result[4][0].data == b"png_y=2"
-
-    def test_non_plain_prepended_to_first(self):
-        """原链非 Plain 组件前置到首条消息。"""
-        seg_cfg = _make_seg_cfg(divider_mode="切分")
-        img = Image.fromFileSystem("/tmp/a.png")
-        result = _collect([img, Plain("第一段\n\n---\n\n第二段")], _make_cfg(), seg_cfg, None)
-        assert len(result) == 2
-        assert result[0][0] is img
-        assert result[0][1].text == "第一段"
+        assert result[4][0].png == b"png_y=2"
 
     def test_divider_split_with_cleaning(self):
         """分隔线=切分 + 清洗：切分点两侧文本各自成条且清洗干净。"""
         seg_cfg = _make_seg_cfg(divider_mode="切分")
         result = _collect(
-            [Plain("好，第一轮回顾 (。-`ω´-)\n\n---\n\n**测试 1：纯闲聊**")],
+            "好，第一轮回顾 (。-`ω´-)\n\n---\n\n**测试 1：纯闲聊**",
             _make_cfg(), seg_cfg, _make_clean_cfg(),
         )
         assert len(result) == 2
@@ -148,10 +138,10 @@ class TestPlanChain:
         fake = MagicMock(return_value=b"fake_png")
         cfg = _make_cfg(code="渲染图像")
         result = _collect(
-            [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: fake}
+            "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: fake}
         )
         fake.assert_called_once()
-        assert isinstance(result[0][0], Image)
+        assert isinstance(result[0][0], Picture)
 
 
 class TestPipelineStreaming:
@@ -170,19 +160,19 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("正文\n\n```py\nx=1\n```")], _make_cfg(code="渲染图像"), seg_cfg,
+                "正文\n\n```py\nx=1\n```", _make_cfg(code="渲染图像"), seg_cfg,
                 None, "/tmp", {CodeBlock: slow},
             )
             iterator = pipeline.__aiter__()
             first = await iterator.__anext__()
             pending = list(finished)
-            rest = [m.chain async for m in iterator]
+            rest = [m.artifacts async for m in iterator]
             return first, pending, rest
 
         first, pending, rest = asyncio.run(_run())
-        assert first.chain[0].text.strip() == "正文"
+        assert first.artifacts[0].text.strip() == "正文"
         assert pending == []  # 首条产出时慢渲染还没跑完
-        assert rest[0][0].data == b"png"
+        assert rest[0][0].png == b"png"
 
     def test_strict_order_with_slow_first(self):
         """第 1 组渲染慢：第 2 组即便先好也必须等它，产出顺序不变。"""
@@ -196,10 +186,10 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("```py\nslow\n```\n\n```py\nfast\n```")],
+                "```py\nslow\n```\n\n```py\nfast\n```",
                 _make_cfg(code="渲染图像"), seg_cfg, None, "/tmp", {CodeBlock: dispatch},
             )
-            return [m.chain[0].data async for m in pipeline]
+            return [m.artifacts[0].png async for m in pipeline]
 
         assert asyncio.run(_run()) == [b"slow", b"fast"]
 
@@ -212,11 +202,11 @@ class TestPipelineStreaming:
         cfg = _make_cfg(code="渲染图像")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
-                [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: hang}
+                "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: hang}
             )
         assert len(result) == 1
         assert result[0][0].name.endswith(".md")
-        with open(result[0][0].file, encoding="utf-8") as f:
+        with open(result[0][0].path, encoding="utf-8") as f:
             assert "x=1" in f.read()
 
     def test_timeout_with_file_mode_keeps_md(self, tmp_path):
@@ -228,7 +218,7 @@ class TestPipelineStreaming:
         cfg = _make_cfg(code="渲染且md文件")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
-                [Plain("```py\nx=1\n```")], cfg, seg_cfg, None,
+                "```py\nx=1\n```", cfg, seg_cfg, None,
                 data_dir=str(tmp_path), renderers={CodeBlock: hang},
             )
         assert len(result) == 1
@@ -243,7 +233,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("```py\nx=1\n```")], _make_cfg(code="渲染且md文件"), seg_cfg, None,
+                "```py\nx=1\n```", _make_cfg(code="渲染且md文件"), seg_cfg, None,
                 str(tmp_path), {CodeBlock: fake},
             )
             [m async for m in pipeline]
@@ -261,7 +251,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("```py\nx=1\n```")], _make_cfg(code="渲染图像"), seg_cfg, None,
+                "```py\nx=1\n```", _make_cfg(code="渲染图像"), seg_cfg, None,
                 "/tmp", {CodeBlock: hang},
             )
             pipeline.cancel()

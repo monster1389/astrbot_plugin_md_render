@@ -1,20 +1,18 @@
 """消息链组装。
 
 plan_chain: 解析、分组并提交全部渲染任务，返回按序产出的流水线。
-build_chain: 异步并发渲染，按配置模式组装单组消息链。
+build_chain: 异步并发渲染，按配置模式组装单组产物。
 """
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from inspect import iscoroutinefunction
 from typing import Any
 
 from astrbot.api import logger
-from astrbot.api.message_components import File as AstrFile
-from astrbot.api.message_components import Image, Plain
+from render.artifacts import Artifact, Message, Picture, SourceFile, Text, has_media
 from render.config import CleanConfig, RenderConfig, SegmentConfig
 from render.elements import ELEMENTS, Element, recipe_for, text_for, writes_file
 from render.parser import Divider, Segment, parse
@@ -66,30 +64,41 @@ async def _render_one(renderer: Callable[[Any], Any], seg: Any) -> bytes:
     return await asyncio.to_thread(quantize, png)
 
 
-def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
-    """按 temp_ttl 将 PNG 以 fromBytes 或落盘文件形式加入消息链。
+def _append_image(
+    artifacts: list[Artifact],
+    png_bytes: bytes,
+    prefix: str,
+    cfg: RenderConfig,
+    data_dir: str,
+) -> None:
+    """按 temp_ttl 决定图片产物是落盘还是只带字节。
 
     Args:
-        chain: 目标消息链列表。
+        artifacts: 目标产物列表。
         png_bytes: 渲染出的 PNG 字节。
         prefix: 产物文件名前缀。
         cfg: 渲染配置。
         data_dir: 插件数据目录路径。
     """
     if cfg.temp_ttl == 0:
-        chain.append(Image.fromBytes(png_bytes))
-    else:
-        png_path = build_temp_path(data_dir, prefix, ".png")
-        with open(png_path, "wb") as f:
-            f.write(png_bytes)
-        chain.append(Image.fromFileSystem(png_path))
+        artifacts.append(Picture(png=png_bytes))
+        return
+    png_path = build_temp_path(data_dir, prefix, ".png")
+    with open(png_path, "wb") as f:
+        f.write(png_bytes)
+    artifacts.append(Picture(png=png_bytes, path=png_path))
 
 
-def _append_file(chain: list, text: str, prefix: str, data_dir: str) -> None:
-    """将 markdown 文本写入 .md 文件并加入消息链。
+def _append_file(
+    artifacts: list[Artifact],
+    text: str,
+    prefix: str,
+    data_dir: str,
+) -> None:
+    """将 markdown 文本写入 .md 文件并加入产物列表。
 
     Args:
-        chain: 目标消息链列表。
+        artifacts: 目标产物列表。
         text: markdown 原始文本。
         prefix: 产物文件名前缀。
         data_dir: 插件数据目录路径。
@@ -97,21 +106,21 @@ def _append_file(chain: list, text: str, prefix: str, data_dir: str) -> None:
     md_path = build_temp_path(data_dir, prefix, ".md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(text)
-    chain.append(AstrFile(name=os.path.basename(md_path), file=md_path))
+    artifacts.append(SourceFile(path=md_path))
 
 
 def _dispatch(
-    chain: list,
+    artifacts: list[Artifact],
     seg: Any,
     result: object,
     cfg: RenderConfig,
     clean_cfg: CleanConfig | None,
     data_dir: str,
 ) -> None:
-    """按 (元素, 模式) 配方组装组件到消息链。
+    """按 (元素, 模式) 配方组装产物到列表。
 
     Args:
-        chain: 目标消息链列表。
+        artifacts: 目标产物列表。
         seg: 元素 segment。
         result: 渲染结果 — bytes 或 None（失败）。
         cfg: 渲染配置。
@@ -125,17 +134,17 @@ def _dispatch(
     # 渲染失败：没有原文可看就出 .md（文件是渲染不出来时的保底形态）
     if recipe.image and result is None:
         if not recipe.text and can_file:
-            _append_file(chain, element.text.to_markdown(seg), element.prefix, data_dir)
+            _append_file(artifacts, element.text.to_markdown(seg), element.prefix, data_dir)
         else:
-            chain.append(Plain(text_for(element, seg, clean_cfg)))
+            artifacts.append(Text(text=text_for(element, seg, clean_cfg)))
         return
 
     if recipe.text:
-        chain.append(Plain(text_for(element, seg, clean_cfg)))
+        artifacts.append(Text(text=text_for(element, seg, clean_cfg)))
     if recipe.image:
-        _append_image(chain, result, element.prefix, cfg, data_dir)
+        _append_image(artifacts, result, element.prefix, cfg, data_dir)
     if recipe.file and can_file:
-        _append_file(chain, element.text.to_markdown(seg), element.prefix, data_dir)
+        _append_file(artifacts, element.text.to_markdown(seg), element.prefix, data_dir)
 
 
 async def build_chain(
@@ -144,8 +153,8 @@ async def build_chain(
     clean_cfg: CleanConfig | None,
     data_dir: str,
     renderers: dict[type, Callable] | None = None,
-) -> list[Plain | Image | AstrFile]:
-    """将解析后的 Segment 列表转换为 AstrBot Component 列表。
+) -> list[Artifact]:
+    """将解析后的 Segment 列表转换为产物列表。
 
     并发提交渲染任务到线程池，全部完成后按原顺序组装；每个元素加通用保险丝，
     自带超时预算的渲染器（budgeted）不套。
@@ -158,7 +167,7 @@ async def build_chain(
         renderers: 渲染器覆盖层，为 None 或未覆盖时用元素注册表里的渲染器。
 
     Returns:
-        AstrBot Component 对象列表。
+        产物列表。
     """
     # 第一遍：收集需要渲染的 segment 索引和协程（仅配方含图片插槽的模式）
     indices: list[int] = []
@@ -188,25 +197,10 @@ async def build_chain(
             results[i] = result
 
     # 第二遍：按原顺序组装
-    chain: list[Plain | Image | AstrFile] = []
+    artifacts: list[Artifact] = []
     for i, seg in enumerate(segments):
-        _dispatch(chain, seg, results.get(i), cfg, clean_cfg, data_dir)
-    return chain
-
-
-def _is_plain(comp: Any) -> bool:
-    """判断组件是否为 Plain 文本。
-
-    Args:
-        comp: AstrBot 消息链组件。
-
-    Returns:
-        True 表示该组件为 Plain 文本。
-    """
-    return (
-        (hasattr(comp, "text") and type(comp).__name__ == "Plain")
-        or (hasattr(comp, "type") and comp.type == "Plain")
-    )
+        _dispatch(artifacts, seg, results.get(i), cfg, clean_cfg, data_dir)
+    return artifacts
 
 
 # 块级元素自身独立成组，前后的纯文本与行内表达式各并成一组（keep_whole）。
@@ -280,45 +274,21 @@ def group_segments(
     return groups
 
 
-def has_media(chain: list[Any]) -> bool:
-    """判断组件列表是否含媒体（Image/File）。
-
-    Args:
-        chain: build_chain 构建的扁平组件列表。
-
-    Returns:
-        True 表示含媒体组件。
-    """
-    return any(not _is_plain(c) for c in chain)
-
-
-def split_messages(chain: list[Any]) -> list[list[Any]]:
+def split_messages(artifacts: list[Artifact]) -> list[list[Artifact]]:
     """组内含媒体时逐组件拆成独立消息；纯文本组保持单条。
 
     拆分保持阅读顺序：代码原文、渲染图、表格原文、表格图……各自独立一条，
     相邻文本或相邻媒体不再合并。
 
     Args:
-        chain: build_chain 构建的扁平组件列表。
+        artifacts: build_chain 构建的扁平产物列表。
 
     Returns:
-        一条或多条消息组件列表。
+        一条或多条消息产物列表。
     """
-    if not has_media(chain):
-        return [chain]
-    return [[c] for c in chain]
-
-
-@dataclass(frozen=True)
-class Message:
-    """流水线产出的一条待发送消息。
-
-    Attributes:
-        chain: 该条消息的组件列表。
-        is_tail: 是否末条——末条不由 deliver 发送，留作 result.chain。
-    """
-    chain: list[Any]
-    is_tail: bool
+    if not has_media(artifacts):
+        return [artifacts]
+    return [[artifact] for artifact in artifacts]
 
 
 @dataclass
@@ -330,14 +300,12 @@ class Pipeline:
     Attributes:
         groups: 分组列表，与 tasks 一一对应。
         tasks: 各组的 build_chain 任务，plan_chain 中已全部提交。
-        non_plain: 原链非 Plain 组件，前置到首条产出的消息。
         image_count: 已产出的图片数。
         file_count: 已产出的文件数。
     """
 
     groups: list[SegmentGroup]
     tasks: list[asyncio.Task]
-    non_plain: list[Any]
     image_count: int = 0
     file_count: int = 0
 
@@ -353,30 +321,25 @@ class Pipeline:
         Yields:
             带留尾标记的消息。
         """
-        prefixed = False
         last_group = len(self.groups) - 1
         for index, (group, task) in enumerate(zip(self.groups, self.tasks)):
             built = await task
             messages = [built] if group.keep_whole else split_messages(built)
-            if not prefixed:
-                if self.non_plain:
-                    messages[0] = self.non_plain + messages[0]
-                prefixed = True
-            for position, chain in enumerate(messages):
-                self._count(chain)
+            for position, artifacts in enumerate(messages):
+                self._count(artifacts)
                 is_tail = index == last_group and position == len(messages) - 1
-                yield Message(chain, is_tail)
+                yield Message(artifacts, is_tail)
 
-    def _count(self, chain: list[Any]) -> None:
+    def _count(self, artifacts: list[Artifact]) -> None:
         """累计产物数量，供汇总日志使用。
 
         Args:
-            chain: 一条消息的组件列表。
+            artifacts: 一条消息的产物列表。
         """
-        for comp in chain:
-            if isinstance(comp, AstrFile):
+        for artifact in artifacts:
+            if isinstance(artifact, SourceFile):
                 self.file_count += 1
-            elif isinstance(comp, Image):
+            elif isinstance(artifact, Picture):
                 self.image_count += 1
 
     def cancel(self) -> None:
@@ -386,7 +349,7 @@ class Pipeline:
 
 
 async def plan_chain(
-    chain: list[Any],
+    text: str,
     cfg: RenderConfig,
     seg_cfg: SegmentConfig,
     clean_cfg: CleanConfig | None,
@@ -395,11 +358,11 @@ async def plan_chain(
 ) -> Pipeline | None:
     """解析、分组并提交全部渲染任务，返回可逐条产出的流水线。
 
-    空链、纯空白文本、或无需任何处理（无元素、无需清洗、无需切分）
+    文本为空或纯空白，或无需任何处理（无元素、无需清洗、无需切分）
     时返回 None，调用方原样保留消息链。
 
     Args:
-        chain: 原始消息链组件列表。
+        text: 原链的纯文本（由 render.bridge 拼接）。
         cfg: 渲染配置。
         seg_cfg: 分段配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
@@ -409,15 +372,10 @@ async def plan_chain(
     Returns:
         待消费的渲染流水线；无事可做时返回 None。
     """
-    if not chain:
+    if not text.strip():
         return None
 
-    text_parts = [c.text or "" for c in chain if _is_plain(c)]
-    full_text = "\n".join(text_parts)
-    if not full_text.strip():
-        return None
-
-    segments = parse(full_text, split_blank_lines=(seg_cfg.blank_line_mode == "切分"))
+    segments = parse(text, split_blank_lines=(seg_cfg.blank_line_mode == "切分"))
 
     # 结构性元素（纯文本段以外的类型）才值得走渲染管线；
     # 纯文本段无清洗、无切分时短路，原样保留消息链。
@@ -431,11 +389,10 @@ async def plan_chain(
         return None
 
     groups = group_segments(segments, seg_cfg)
-    non_plain = [c for c in chain if not _is_plain(c)]
 
     # 立刻提交全部渲染任务：并发度与整批渲染时一致，慢的组不挡住别的组开工
     tasks = [
         asyncio.create_task(build_chain(g.segments, cfg, clean_cfg, data_dir, renderers))
         for g in groups
     ]
-    return Pipeline(groups, tasks, non_plain)
+    return Pipeline(groups, tasks)

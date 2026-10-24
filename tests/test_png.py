@@ -82,5 +82,5 @@ class TestChainQuantizesProduct:
                 renderers={CodeBlock: fake},
             )
         )
-        assert result[0].data != _PNG_1PX
-        assert result[0].data == quantize(_PNG_1PX)
+        assert result[0].png != _PNG_1PX
+        assert result[0].png == quantize(_PNG_1PX)
