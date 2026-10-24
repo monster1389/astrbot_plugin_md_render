@@ -145,6 +145,8 @@ class Element:
 
     Attributes:
         render: 渲染函数，返回 PNG bytes；None 表示不渲染（纯文本元素）。
+            这是链上入口，不是元素图的唯一入口：表格格内的公式走
+            ``expr_render.formula_image``，不进 chain。
         text: 两种文本配方。
         config: 配置身份；None 表示该元素没有配置模式（纯文本段 / 分隔线）。
         clean: 管这个元素的 ``CleanConfig`` 字段名；None 表示无单一开关，

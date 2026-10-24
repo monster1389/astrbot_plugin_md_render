@@ -160,6 +160,22 @@ def font_files() -> list[str]:
     return paths
 
 
+def typst_fonts() -> tuple[list[str], list[str]]:
+    """返回 Typst 需要的额外字体目录与系统字体族名。
+
+    Typst 默认能看见系统字体；只有手动放进 data_dir 的字体需要显式注册目录。
+
+    Returns:
+        (字体目录列表, 族名列表)。没有可用字体时两者都为空。
+    """
+    spec = find_font_spec()
+    family = font_family(spec)
+    search_dir = font_search_dir(spec)
+    dirs = [search_dir] if search_dir else []
+    families = [family] if family else []
+    return dirs, families
+
+
 def measure_font(size: int) -> ImageFont.FreeTypeFont:
     """获取比例体的 Pillow 字体对象，按 (规格, 字号) 缓存。线程安全。
 

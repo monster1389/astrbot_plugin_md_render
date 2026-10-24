@@ -4,43 +4,29 @@
 不用 ``<table>``：takumi 0.1.5 忽略 ``<col>`` / ``<colgroup>`` 的宽度（写百分比或
 px 都会被均分），所以表格用 flex 手搭，列宽以像素写死在格子上。
 
-字体与底色都来自公共层：比例体族名与度量字体取自 ``render.font``，底色取自
-``render.theme``，出图交给 ``render.renderer``。
+字体与底色都来自公共层：字体栈与调色板取自 ``render.canvas``，度量字体取自
+``render.font``，出图交给 ``render.canvas.fragment``。
 """
 from __future__ import annotations
 
 import base64
 import html as htmllib
 from dataclasses import dataclass, field
-from io import BytesIO
 
-from PIL import Image, ImageFont
+from PIL import ImageFont
 
-from render import font, renderer
-from render.expr_render import render_expr_image
+from astrbot.api import logger
+from render import canvas, font
+from render.expr_render import formula_image
 from render.parser import InlineExpr, split_inline_math
 from render.table_domain import RichCell, Span, Table
-from render.theme import BG, page
 
-# 颜色预设（深色底与代码块、公式图同源，底色另有 _BG 指向 theme）
-_FONT = "#dcdce6"
-_HEADER_BG = "#282841"
-_GRID = "#50506e"
-_BOLD = "#ffd2a0"
-_ITALIC = "#b4d2f0"
-_STRIKE = "#8c8c96"
-_CODE_BG = "#323246"
-_CODE = "#96dc96"
-_LINK = "#78b4ff"
-
-_FONT_SIZE = 34   # 正文字号（px）
 _PAD_X = 18       # 单元格左右内边距（px）
 _PAD_Y = 14       # 单元格上下内边距（px）
 _BORDER = 1       # 边框宽度（px）
 _CODE_PAD = 4     # 行内代码左右内边距（px）
-_MAX_WIDTH = 1080  # 画布宽度上限
 _FLOOR_MAX = 300   # 短列阈值：自然宽不超过它的列不参与压缩
-_TWO_CHARS = _FONT_SIZE * 2
+_TWO_CHARS = canvas.TABLE_SIZE * 2
 
 
 @dataclass
@@ -73,57 +59,57 @@ class _Layout:
     n_cols: int = 1
 
 
-def _css(family: str) -> str:
+def _css(stack: str) -> str:
     """拼出表格样式表。
 
     Args:
-        family: 字体族名。
+        stack: CSS 字体栈，来自版面层。
 
     Returns:
         CSS 文本。
     """
     return f"""
-body {{ margin: 0; background: {BG};
-        font-family: "{family}"; font-size: {_FONT_SIZE}px; line-height: 1.5; }}
+body {{ margin: 0; background: {canvas.BG};
+        font-family: {stack}; font-size: {canvas.TABLE_SIZE}px; line-height: 1.5; }}
 .rows {{ display: flex; flex-direction: column;
-         border-left: {_BORDER}px solid {_GRID};
-         border-top: {_BORDER}px solid {_GRID}; }}
+         border-left: {_BORDER}px solid {canvas.GRID};
+         border-top: {_BORDER}px solid {canvas.GRID}; }}
 .row {{ display: flex; }}
 .cell {{ box-sizing: border-box; flex: none;
-         border-right: {_BORDER}px solid {_GRID};
-         border-bottom: {_BORDER}px solid {_GRID};
-         padding: {_PAD_Y}px {_PAD_X}px; color: {_FONT};
+         border-right: {_BORDER}px solid {canvas.GRID};
+         border-bottom: {_BORDER}px solid {canvas.GRID};
+         padding: {_PAD_Y}px {_PAD_X}px; color: {canvas.TEXT};
          word-break: break-word; overflow-wrap: anywhere; }}
-.hd {{ background: {_HEADER_BG}; color: {_BOLD}; }}
-b {{ color: {_BOLD}; }}
-i {{ color: {_ITALIC}; }}
-s {{ color: {_STRIKE}; }}
-code {{ background: {_CODE_BG}; color: {_CODE};
+.hd {{ background: {canvas.HEADER_BG}; color: {canvas.BOLD}; }}
+b {{ color: {canvas.BOLD}; }}
+i {{ color: {canvas.ITALIC}; }}
+s {{ color: {canvas.STRIKE}; }}
+code {{ background: {canvas.CODE_BG}; color: {canvas.CODE_TEXT};
         padding: 0 {_CODE_PAD}px; }}
-a {{ color: {_LINK}; text-decoration: underline; }}
+a {{ color: {canvas.LINK}; text-decoration: underline; }}
 """
 
 
-def _span_color(span: Span) -> str:
-    """根据 Span 格式状态返回对应文字颜色。
+def _span_color(span: Span) -> str | None:
+    """格内公式的文字色：只有带显式格式的片段才覆盖角色默认色。
 
     Args:
         span: 富文本片段。
 
     Returns:
-        CSS 颜色值。
+        CSS 颜色值；纯文本片段返回 None，由公式角色决定。
     """
     if span.code:
-        return _CODE
+        return canvas.CODE_TEXT
     if span.link_url:
-        return _LINK
+        return canvas.LINK
     if span.strike:
-        return _STRIKE
+        return canvas.STRIKE
     if span.bold:
-        return _BOLD
+        return canvas.BOLD
     if span.italic:
-        return _ITALIC
-    return _FONT
+        return canvas.ITALIC
+    return None
 
 
 def _decorate(inner: str, span: Span) -> str:
@@ -149,21 +135,30 @@ def _decorate(inner: str, span: Span) -> str:
     return inner
 
 
-def _data_uri(image: Image.Image) -> str:
-    """把公式图转成可内嵌的 data URI。"""
-    buf = BytesIO()
-    image.save(buf, "PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+def _data_uri(png: bytes) -> str:
+    """把公式图转成可内嵌的 data URI。
+
+    Args:
+        png: PNG 字节。
+
+    Returns:
+        data URI 字符串。
+    """
+    return "data:image/png;base64," + base64.b64encode(png).decode()
 
 
-def _cell(cell: RichCell, font: ImageFont.FreeTypeFont,
-          math_cache: dict[tuple[str, str], Image.Image]) -> _Cell:
+def _cell(
+    cell: RichCell,
+    measure: ImageFont.FreeTypeFont,
+    *,
+    header: bool = False,
+) -> _Cell:
     """把一个富文本单元格转成 HTML 片段并量出单行宽度。
 
     Args:
         cell: 富文本单元格。
-        font: 测量用字体。
-        math_cache: 公式源码 + 颜色 → 公式图，同一表格内复用。
+        measure: 测量用字体。
+        header: 是否表头行，决定格内公式的默认颜色。
 
     Returns:
         单元格片段、宽度与对齐方式。
@@ -174,20 +169,30 @@ def _cell(cell: RichCell, font: ImageFont.FreeTypeFont,
         color = _span_color(span)
         for part in split_inline_math(span.text):
             if isinstance(part, InlineExpr):
-                key = (part.expr, color)
-                image = math_cache.get(key)
-                if image is None:
-                    image = render_expr_image(part.expr, color=color, size=_FONT_SIZE)
-                    math_cache[key] = image
-                w, h = image.size
+                try:
+                    formula = formula_image(
+                        part.expr,
+                        role="table_header" if header else "table",
+                        color=color,
+                    )
+                except RuntimeError as exc:
+                    # 一格失败只坏这一格：退回原文，其余格子照常出图
+                    literal = f"${part.expr}$"
+                    logger.warning(
+                        "格内公式渲染失败，改用原文：%s（%s）", part.expr, exc
+                    )
+                    parts.append(_decorate(htmllib.escape(literal), span))
+                    width += int(measure.getlength(literal))
+                    continue
                 parts.append(
-                    f'<img src="{_data_uri(image)}" '
-                    f'style="height:{h}px; width:{w}px; vertical-align:middle">'
+                    f'<img src="{_data_uri(formula.png)}" '
+                    f'style="height:{formula.height}px; width:{formula.width}px; '
+                    f'vertical-align:middle">'
                 )
-                width += w
+                width += formula.width
             elif part.text:
                 parts.append(_decorate(htmllib.escape(part.text), span))
-                width += int(font.getlength(part.text))
+                width += int(measure.getlength(part.text))
                 if span.code:
                     width += _CODE_PAD * 2
     return _Cell(html="".join(parts) or "&nbsp;", width=width, align=cell.align)
@@ -230,7 +235,7 @@ def plan_widths(natural: list[int], header: list[int]) -> list[int]:
     n_cols = len(natural)
     if n_cols == 0:
         return []
-    avail = _MAX_WIDTH - _BORDER * (n_cols + 1)
+    avail = canvas.MAX_WIDTH - _BORDER * (n_cols + 1)
     if sum(natural) <= avail:
         return list(natural)
     floor = [
@@ -282,18 +287,18 @@ def _align_style(cells: list[_Cell], index: int) -> str:
 
 
 def _document(layout: _Layout, widths: list[int]) -> str:
-    """拼出完整 HTML 文档（表头 + 表体，flex 手搭）。
+    """拼出表格主体片段（表头 + 表体，flex 手搭）。
 
     Args:
         layout: 已量好的布局。
         widths: 各列像素宽。
 
     Returns:
-        完整的 HTML 文档字符串。
+        HTML 片段，页面骨架与底色由版面层补。
     """
     head = _row_html(layout.header, widths, "hd") if layout.header else ""
     body = "".join(_row_html(row, widths, "") for row in layout.rows)
-    return page(f'<div class="rows">{head}{body}</div>')
+    return f'<div class="rows">{head}{body}</div>'
 
 
 def render_table(table: Table) -> bytes:
@@ -305,17 +310,16 @@ def render_table(table: Table) -> bytes:
     Returns:
         PNG 图片字节。
     """
-    measure = font.measure_font(_FONT_SIZE)
-    math_cache: dict[tuple[str, str], Image.Image] = {}
+    measure = font.measure_font(canvas.TABLE_SIZE)
     layout = _Layout(
-        header=[_cell(c, measure, math_cache) for c in table.headers],
-        rows=[[_cell(c, measure, math_cache) for c in row] for row in table.rows],
+        header=[_cell(c, measure, header=True) for c in table.headers],
+        rows=[[_cell(c, measure) for c in row] for row in table.rows],
         n_cols=max([len(table.headers)] + [len(r) for r in table.rows] + [1]),
     )
     natural, header = _natural_widths(layout)
     widths = plan_widths(natural, header)
-    return renderer.render_page(
+    return canvas.fragment(
         _document(layout, widths),
-        _css(font.body_family() or "sans-serif"),
+        _css(canvas.font_stack("body")),
         width=max(sum(widths) + _BORDER, 1),
     )

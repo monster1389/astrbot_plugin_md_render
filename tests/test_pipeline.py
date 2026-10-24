@@ -1,119 +1,85 @@
 """管道编排测试：消息链 → 渲染流水线 → 待发送消息列表。"""
-import pytest
 import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from factories import clean_cfg as _clean_cfg
+from factories import collect as _collect
+from factories import render_cfg as _render_cfg
+from factories import segment_cfg as _segment_cfg
 from render.artifacts import Picture, SourceFile, Text
 from render.parser import CodeBlock
-from render.config import CleanConfig, RenderConfig, SegmentConfig
-from render.elements import FAMILIES
 
 # 这些用例测链组装与顺序，fake 渲染器返回假字节，量化由 test_png.py 覆盖
 pytestmark = pytest.mark.usefixtures("no_quantize")
 
-
-def _make_cfg(temp_ttl: int = 0, **modes) -> RenderConfig:
-    """构造测试用 RenderConfig；modes 用元素族键（code/table/expr/html/mermaid）。
-
-    未指定的族一律「不处理」。
-    """
-    return RenderConfig(modes={key: "不处理" for key in FAMILIES} | modes, temp_ttl=temp_ttl)
-
-
-def _make_seg_cfg(**overrides):
-    """构造测试用 SegmentConfig。"""
-    defaults = {
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
-        "send_delay": False,
-    }
-    return SegmentConfig(**(defaults | overrides))
-
-
 # 默认分段配置：不切分、无延时。需定制的用例在方法内局部覆盖。
-seg_cfg = _make_seg_cfg()
-
-
-def _make_clean_cfg(**overrides):
-    """构造测试用 CleanConfig，经典字段默认 True，code/table/expr 默认 False。"""
-    defaults = vars(CleanConfig()).copy()
-    for k in defaults:
-        if k not in ("code", "table", "expr"):
-            defaults[k] = True
-    defaults.update(overrides)
-    return CleanConfig(**defaults)
-
-
-def _collect(text, cfg, seg_cfg, clean_cfg, data_dir="/tmp", renderers=None):
-    """建流水线并收集全部产出消息；plan_chain 返回 None 时同样返回 None。"""
-    from render.chain import plan_chain
-
-    async def _run():
-        pipeline = await plan_chain(text, cfg, seg_cfg, clean_cfg, data_dir, renderers)
-        if pipeline is None:
-            return None
-        return [message.artifacts async for message in pipeline]
-
-    return asyncio.run(_run())
+seg_cfg = _segment_cfg()
 
 
 class TestPlanChain:
-    def test_empty_chain_returns_none(self):
+    def test_empty_chain_returns_none(self, tmp_path):
         """空链返回 None。"""
-        assert _collect("", _make_cfg(), seg_cfg, None) is None
+        assert _collect("", _render_cfg(), seg_cfg, None, str(tmp_path)) is None
 
-    def test_blank_text_returns_none(self):
+    def test_blank_text_returns_none(self, tmp_path):
         """纯空白文本返回 None。"""
-        assert _collect("   ", _make_cfg(), seg_cfg, None) is None
+        assert _collect("   ", _render_cfg(), seg_cfg, None, str(tmp_path)) is None
 
-    def test_noop_returns_none(self):
+    def test_noop_returns_none(self, tmp_path):
         """无元素、无清洗、无切分 → None（链原样保留）。"""
-        assert _collect("普通文本", _make_cfg(), seg_cfg, None) is None
+        assert _collect("普通文本", _render_cfg(), seg_cfg, None, str(tmp_path)) is None
 
-    def test_cleaning_produces_messages(self):
+    def test_cleaning_produces_messages(self, tmp_path):
         """仅清洗开启：产出清洗后的单条消息。"""
-        result = _collect("**加粗**", _make_cfg(), seg_cfg, _make_clean_cfg())
+        result = _collect(
+            "**加粗**", _render_cfg(), seg_cfg, _clean_cfg(), str(tmp_path)
+        )
         assert [c.text for c in result[0]] == ["加粗"]
 
-    def test_keep_original_splits_text_and_image(self):
+    def test_keep_original_splits_text_and_image(self, tmp_path):
         """渲染且保留原文：原文文本前置，图片留末条。"""
         fake = MagicMock(return_value=b"fake_png")
-        cfg = _make_cfg(code="渲染且保留原文")
+        cfg = _render_cfg(code="渲染且保留原文")
         result = _collect(
-            "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: fake}
+            "```py\nx=1\n```", cfg, seg_cfg, None, str(tmp_path), renderers={CodeBlock: fake}
         )
         assert len(result) == 2
         assert "x=1" in result[0][0].text
         assert result[1][0].png == b"fake_png"
 
-    def test_divider_split_returns_groups(self):
+    def test_divider_split_returns_groups(self, tmp_path):
         """分隔线=切分：每组一条消息。"""
-        seg_cfg = _make_seg_cfg(divider_mode="切分")
+        seg_cfg = _segment_cfg(divider_mode="切分")
         result = _collect(
-            "第一段\n\n---\n\n第二段\n\n---\n\n第三段", _make_cfg(), seg_cfg, None
+            "第一段\n\n---\n\n第二段\n\n---\n\n第三段", _render_cfg(), seg_cfg, None,
+            str(tmp_path),
         )
         assert len(result) == 3
         assert result[0][0].text.strip() == "第一段"
         assert result[1][0].text.strip() == "第二段"
         assert result[2][0].text.strip() == "第三段"
 
-    def test_blank_line_split_returns_groups(self):
+    def test_blank_line_split_returns_groups(self, tmp_path):
         """连续换行=切分：空行分隔的段落各一条。"""
-        seg_cfg = _make_seg_cfg(blank_line_mode="切分")
-        result = _collect("第一段\n\n第二段\n\n第三段", _make_cfg(), seg_cfg, None)
+        seg_cfg = _segment_cfg(blank_line_mode="切分")
+        result = _collect(
+            "第一段\n\n第二段\n\n第三段", _render_cfg(), seg_cfg, None, str(tmp_path)
+        )
         assert len(result) == 3
         assert [c.text for c in result[0]] == ["第一段"]
         assert [c.text for c in result[1]] == ["第二段"]
         assert [c.text for c in result[2]] == ["第三段"]
 
-    def test_interleaved_components_in_order(self):
+    def test_interleaved_components_in_order(self, tmp_path):
         """交错元素按组件拆条，保持阅读顺序。"""
         fake = MagicMock(side_effect=lambda seg: b"png_" + seg.code.encode())
-        cfg = _make_cfg(code="渲染且保留原文")
+        cfg = _render_cfg(code="渲染且保留原文")
         result = _collect(
             "正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```",
-            cfg, seg_cfg, None, renderers={CodeBlock: fake},
+            cfg, seg_cfg, None, str(tmp_path), renderers={CodeBlock: fake},
         )
         assert len(result) == 5
         assert result[0][0].text.strip() == "正文第一行"
@@ -122,23 +88,23 @@ class TestPlanChain:
         assert "y=2" in result[3][0].text
         assert result[4][0].png == b"png_y=2"
 
-    def test_divider_split_with_cleaning(self):
+    def test_divider_split_with_cleaning(self, tmp_path):
         """分隔线=切分 + 清洗：切分点两侧文本各自成条且清洗干净。"""
-        seg_cfg = _make_seg_cfg(divider_mode="切分")
+        seg_cfg = _segment_cfg(divider_mode="切分")
         result = _collect(
             "好，第一轮回顾 (。-`ω´-)\n\n---\n\n**测试 1：纯闲聊**",
-            _make_cfg(), seg_cfg, _make_clean_cfg(),
+            _render_cfg(), seg_cfg, _clean_cfg(), str(tmp_path),
         )
         assert len(result) == 2
         assert result[0][0].text == "好，第一轮回顾 (。-`ω´-)"
         assert result[1][0].text == "测试 1：纯闲聊"
 
-    def test_passes_renderers(self):
+    def test_passes_renderers(self, tmp_path):
         """plan_chain 透传 renderers 到 build_chain。"""
         fake = MagicMock(return_value=b"fake_png")
-        cfg = _make_cfg(code="渲染图像")
+        cfg = _render_cfg(code="渲染图像")
         result = _collect(
-            "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: fake}
+            "```py\nx=1\n```", cfg, seg_cfg, None, str(tmp_path), renderers={CodeBlock: fake}
         )
         fake.assert_called_once()
         assert isinstance(result[0][0], Picture)
@@ -147,7 +113,7 @@ class TestPlanChain:
 class TestPipelineStreaming:
     """流水线语义：提交即开工、严格保序、超时降级、产物计数、取消。"""
 
-    def test_first_message_ready_before_slow_render_finishes(self):
+    def test_first_message_ready_before_slow_render_finishes(self, tmp_path):
         """首条纯文本不必等后面的慢渲染——流水线不向前多看一条。"""
         from render.chain import plan_chain
 
@@ -160,8 +126,8 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                "正文\n\n```py\nx=1\n```", _make_cfg(code="渲染图像"), seg_cfg,
-                None, "/tmp", {CodeBlock: slow},
+                "正文\n\n```py\nx=1\n```", _render_cfg(code="渲染图像"), seg_cfg,
+                None, str(tmp_path), {CodeBlock: slow},
             )
             iterator = pipeline.__aiter__()
             first = await iterator.__anext__()
@@ -174,7 +140,7 @@ class TestPipelineStreaming:
         assert pending == []  # 首条产出时慢渲染还没跑完
         assert rest[0][0].png == b"png"
 
-    def test_strict_order_with_slow_first(self):
+    def test_strict_order_with_slow_first(self, tmp_path):
         """第 1 组渲染慢：第 2 组即便先好也必须等它，产出顺序不变。"""
         from render.chain import plan_chain
 
@@ -187,22 +153,23 @@ class TestPipelineStreaming:
         async def _run():
             pipeline = await plan_chain(
                 "```py\nslow\n```\n\n```py\nfast\n```",
-                _make_cfg(code="渲染图像"), seg_cfg, None, "/tmp", {CodeBlock: dispatch},
+                _render_cfg(code="渲染图像"), seg_cfg, None, str(tmp_path), {CodeBlock: dispatch},
             )
             return [m.artifacts[0].png async for m in pipeline]
 
         assert asyncio.run(_run()) == [b"slow", b"fast"]
 
-    def test_render_timeout_degrades(self):
+    def test_render_timeout_degrades(self, tmp_path):
         """渲染超过保险丝：按失败降级为 .md 文件，不抛异常。"""
         def hang(seg):
             time.sleep(0.3)
             return b"never"
 
-        cfg = _make_cfg(code="渲染图像")
+        cfg = _render_cfg(code="渲染图像")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
-                "```py\nx=1\n```", cfg, seg_cfg, None, renderers={CodeBlock: hang}
+                "```py\nx=1\n```", cfg, seg_cfg, None, str(tmp_path),
+                renderers={CodeBlock: hang},
             )
         assert len(result) == 1
         assert result[0][0].name.endswith(".md")
@@ -215,7 +182,7 @@ class TestPipelineStreaming:
             time.sleep(0.3)
             return b"never"
 
-        cfg = _make_cfg(code="渲染且md文件")
+        cfg = _render_cfg(code="渲染且md文件")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
                 "```py\nx=1\n```", cfg, seg_cfg, None,
@@ -233,7 +200,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                "```py\nx=1\n```", _make_cfg(code="渲染且md文件"), seg_cfg, None,
+                "```py\nx=1\n```", _render_cfg(code="渲染且md文件"), seg_cfg, None,
                 str(tmp_path), {CodeBlock: fake},
             )
             [m async for m in pipeline]
@@ -241,7 +208,7 @@ class TestPipelineStreaming:
 
         assert asyncio.run(_run()) == (1, 1)
 
-    def test_cancel_stops_pending_tasks(self):
+    def test_cancel_stops_pending_tasks(self, tmp_path):
         """cancel 取消未完成的渲染任务。"""
         from render.chain import plan_chain
 
@@ -251,8 +218,8 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                "```py\nx=1\n```", _make_cfg(code="渲染图像"), seg_cfg, None,
-                "/tmp", {CodeBlock: hang},
+                "```py\nx=1\n```", _render_cfg(code="渲染图像"), seg_cfg, None,
+                str(tmp_path), {CodeBlock: hang},
             )
             pipeline.cancel()
             await asyncio.sleep(0)  # 让取消生效

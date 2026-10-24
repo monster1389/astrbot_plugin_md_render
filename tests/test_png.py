@@ -1,32 +1,20 @@
-"""主题与 PNG 归一化测试。"""
+"""PNG 归一化测试。"""
 import io
 import base64
 
+import pytest
 from PIL import Image
 
 from render.chain import build_chain
 from render.config import RenderConfig
 from render.elements import FAMILIES
 from render.parser import CodeBlock
-from render.png import quantize
-from render.theme import BG, page
+from render.png import header_size, quantize
 
 _PNG_1PX = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQk5MDAAC4AFuF"
     "/QUSAAAAAElFTkSuQmCC"
 )
-
-
-class TestTheme:
-    def test_background_is_unified_dark(self):
-        """所有自绘图片共用一个底色。"""
-        assert BG == "#1E1E1E"
-
-    def test_page_wraps_body_with_background(self):
-        html = page("<p>正文</p>")
-        assert html.startswith("<html><body")
-        assert f"background:{BG}" in html
-        assert "<p>正文</p>" in html
 
 
 class TestQuantize:
@@ -61,10 +49,20 @@ class TestQuantize:
         assert len(quantize(buf.getvalue())) < len(buf.getvalue())
 
 
+class TestHeaderSize:
+    def test_reads_ihdr_without_decoding(self):
+        """尺寸直接从 PNG 头读，不解码像素。"""
+        assert header_size(_PNG_1PX) == (1, 1)
+
+    def test_rejects_non_png(self):
+        with pytest.raises(ValueError):
+            header_size(b"not a png at all")
+
+
 class TestChainQuantizesProduct:
     """链出口对所有产物统一量化（不经 no_quantize 夹具）。"""
 
-    def test_result_is_quantized(self):
+    def test_result_is_quantized(self, tmp_path):
         import asyncio
         from unittest.mock import MagicMock
 
@@ -78,7 +76,7 @@ class TestChainQuantizesProduct:
                 [CodeBlock(lang="py", code="x=1")],
                 cfg,
                 None,
-                "/tmp",
+                str(tmp_path),
                 renderers={CodeBlock: fake},
             )
         )

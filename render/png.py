@@ -6,13 +6,15 @@
 """
 from __future__ import annotations
 
+import struct
 from io import BytesIO
 
 from PIL import Image
 
-from render.theme import BG
+from render import canvas
 
 _COLORS = 128
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 def quantize(png: bytes) -> bytes:
@@ -34,6 +36,26 @@ def quantize(png: bytes) -> bytes:
     return buf.getvalue()
 
 
+def header_size(png: bytes) -> tuple[int, int]:
+    """读 PNG 头拿尺寸，不解码像素。
+
+    渲染器只需要宽高排版（如表格格内公式），为这个把整张图解码一遍是浪费。
+
+    Args:
+        png: PNG 字节。
+
+    Returns:
+        (宽, 高)，单位像素。
+
+    Raises:
+        ValueError: 不是 PNG，或缺 IHDR 块。
+    """
+    if len(png) < 24 or not png.startswith(_PNG_MAGIC) or png[12:16] != b"IHDR":
+        raise ValueError("不是 PNG 数据，无法读取尺寸")
+    width, height = struct.unpack(">II", png[16:24])
+    return width, height
+
+
 def _flatten(image: Image.Image) -> Image.Image:
     """把任意模式转成不透明 RGB，透明处填主题底色。
 
@@ -47,7 +69,7 @@ def _flatten(image: Image.Image) -> Image.Image:
         image.mode == "P" and "transparency" in image.info
     ):
         rgba = image.convert("RGBA")
-        canvas = Image.new("RGBA", rgba.size, BG + "FF")
-        canvas.alpha_composite(rgba)
-        return canvas.convert("RGB")
+        backdrop = Image.new("RGBA", rgba.size, canvas.BG + "FF")
+        backdrop.alpha_composite(rgba)
+        return backdrop.convert("RGB")
     return image.convert("RGB")

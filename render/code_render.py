@@ -15,37 +15,33 @@ from pygments.lexers import TextLexer, get_lexer_by_name
 from pygments.util import ClassNotFound
 
 from astrbot.api import logger
-from render import renderer
-from render.font import find_font_spec, font_family
-from render.theme import BG
+from render import canvas
+from render.font import find_font_spec
 
 _STYLE = "material"
-_FONT_SIZE = 38
 _PAD = 27
 _LINE_HEIGHT = 53  # 与 pillow 版一致：字号 38 的字高 + 8px 行间距
 _TAB_SIZE = 4
-_MAX_WIDTH = 1080  # 画布宽度上限（含两侧内边距），超出即折行
 
 # 空代码块要占一行，否则图片只剩内边距
 _BLANK = "&#8203;"
 
 
-def _css(family: str) -> str:
+def _css(stack: str) -> str:
     """拼出代码块样式表。
 
     Args:
-        family: 代码字体族名。
+        stack: CSS 字体栈，来自版面层。
 
     Returns:
         CSS 文本。
     """
-    stack = f"'{family}', monospace" if family else "monospace"
     return f"""
-html,body{{margin:0;padding:0;background:{BG};}}
+html,body{{margin:0;padding:0;background:{canvas.BG};}}
 pre.hl{{margin:0;padding:{_PAD}px;font-family:{stack};
-  font-size:{_FONT_SIZE}px;line-height:{_LINE_HEIGHT}px;tab-size:{_TAB_SIZE};
+  font-size:{canvas.CODE_SIZE}px;line-height:{_LINE_HEIGHT}px;tab-size:{_TAB_SIZE};
   white-space:pre-wrap;overflow-wrap:anywhere;
-  max-width:{_MAX_WIDTH}px;background:{BG};}}
+  max-width:{canvas.MAX_WIDTH}px;background:{canvas.BG};}}
 pre.hl span[class]{{font-style:normal;font-weight:normal;}}
 """
 
@@ -79,7 +75,7 @@ def build_page(code: str, lang: str) -> tuple[str, str]:
         lang: 代码块语言标注，空串表示未标注。
 
     Returns:
-        (HTML 文档, CSS 文本)。
+        (HTML 片段, CSS 文本)。
 
     Raises:
         RuntimeError: 系统与插件目录都没有可用字体。
@@ -89,8 +85,8 @@ def build_page(code: str, lang: str) -> tuple[str, str]:
         raise RuntimeError("未找到可用字体，无法渲染代码块")
     formatter = HtmlFormatter(style=_STYLE, nowrap=True, cssclass="hl")
     body = highlight(code.rstrip("\n"), _lexer(lang), formatter).rstrip("\n")
-    page = f'<html><body><pre class="hl">{body or _BLANK}</pre></body></html>'
-    return page, formatter.get_style_defs(".hl") + _css(font_family(spec) or "")
+    fragment = f'<pre class="hl">{body or _BLANK}</pre>'
+    return fragment, formatter.get_style_defs(".hl") + _css(canvas.font_stack("mono"))
 
 
 def render_code(seg: object) -> bytes:
@@ -106,5 +102,5 @@ def render_code(seg: object) -> bytes:
         RuntimeError: 系统与插件目录都没有可用字体。
     """
     lang: str = getattr(seg, "lang", "") or ""
-    page, css = build_page(getattr(seg, "code", ""), lang)
-    return renderer.render_page(page, css)
+    fragment, css = build_page(getattr(seg, "code", ""), lang)
+    return canvas.fragment(fragment, css)

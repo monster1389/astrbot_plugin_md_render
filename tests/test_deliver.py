@@ -3,17 +3,8 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, patch
 
+from factories import segment_cfg as _make_cfg
 from render.artifacts import Message, Picture, SourceFile, Text
-from render.config import SegmentConfig
-
-
-def _make_cfg(**overrides):
-    """构造测试用 SegmentConfig，支持按需覆盖。"""
-    defaults = {
-        "divider_mode": "不处理",
-        "blank_line_mode": "不处理",
-    }
-    return SegmentConfig(**(defaults | overrides))
 
 
 class _FakePipeline:

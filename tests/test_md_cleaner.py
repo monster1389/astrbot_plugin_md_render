@@ -5,7 +5,7 @@ from render.md_cleaner import clean_markdown
 from render.config import CleanConfig
 
 
-def _cfg(**overrides) -> CleanConfig:
+def _all_on(**overrides) -> CleanConfig:
     defaults = {k: True for k in vars(CleanConfig())}
     defaults.update(overrides)
     return CleanConfig(**defaults)
@@ -13,118 +13,118 @@ def _cfg(**overrides) -> CleanConfig:
 
 class TestCleanAllOn:
     def test_clean_bold(self):
-        assert clean_markdown("**加粗**", _cfg()) == "加粗"
+        assert clean_markdown("**加粗**", _all_on()) == "加粗"
 
     def test_clean_italic(self):
-        assert clean_markdown("*斜体*", _cfg()) == "斜体"
+        assert clean_markdown("*斜体*", _all_on()) == "斜体"
 
     def test_clean_underscore_italic(self):
-        assert clean_markdown("_斜体_", _cfg()) == "斜体"
+        assert clean_markdown("_斜体_", _all_on()) == "斜体"
 
     def test_clean_strikethrough(self):
-        assert clean_markdown("~~删除~~", _cfg()) == "删除"
+        assert clean_markdown("~~删除~~", _all_on()) == "删除"
 
     def test_clean_inline_code(self):
-        assert clean_markdown("`code`", _cfg()) == "code"
+        assert clean_markdown("`code`", _all_on()) == "code"
 
     def test_clean_link(self):
-        assert clean_markdown("[文档](https://x.com)", _cfg()) == "文档 (https://x.com)"
+        assert clean_markdown("[文档](https://x.com)", _all_on()) == "文档 (https://x.com)"
 
     def test_clean_image_with_alt(self):
-        assert clean_markdown("![logo](https://x.com/img.png)", _cfg()) == "logo (https://x.com/img.png)"
+        assert clean_markdown("![logo](https://x.com/img.png)", _all_on()) == "logo (https://x.com/img.png)"
 
     def test_clean_image_no_alt(self):
-        assert clean_markdown("![](https://x.com/img.png)", _cfg()) == "(https://x.com/img.png)"
+        assert clean_markdown("![](https://x.com/img.png)", _all_on()) == "(https://x.com/img.png)"
 
     def test_clean_heading_h1(self):
-        assert clean_markdown("# 标题", _cfg()) == "标题"
+        assert clean_markdown("# 标题", _all_on()) == "标题"
 
     def test_clean_heading_h2(self):
-        assert clean_markdown("## 二级标题", _cfg()) == "二级标题"
+        assert clean_markdown("## 二级标题", _all_on()) == "二级标题"
 
     def test_clean_heading_h3(self):
-        assert clean_markdown("### 三级标题", _cfg()) == "三级标题"
+        assert clean_markdown("### 三级标题", _all_on()) == "三级标题"
 
     def test_clean_heading_preserves_paragraph_break(self):
         """清洗标题后保留与后续段落的 \n\n。"""
-        assert clean_markdown("# 标题\n\n内容", _cfg(blank_line=False)) == "标题\n\n内容"
+        assert clean_markdown("# 标题\n\n内容", _all_on(blank_line=False)) == "标题\n\n内容"
 
     def test_clean_heading_at_end_no_trailing(self):
         """标题在文末无后续内容时不追加 \n\n。"""
-        assert clean_markdown("# 标题", _cfg()) == "标题"
+        assert clean_markdown("# 标题", _all_on()) == "标题"
 
     def test_clean_unordered_list(self):
-        assert clean_markdown("- 项目", _cfg()) == "项目"
+        assert clean_markdown("- 项目", _all_on()) == "项目"
 
     def test_clean_unordered_list_preserves_newlines(self):
         """清洗无序列表后保留列表项间 \n。"""
-        assert clean_markdown("- a\n- b", _cfg()) == "a\nb"
+        assert clean_markdown("- a\n- b", _all_on()) == "a\nb"
 
     def test_clean_ordered_list(self):
-        assert clean_markdown("1. 第一", _cfg()) == "第一"
+        assert clean_markdown("1. 第一", _all_on()) == "第一"
 
     def test_clean_ordered_list_preserves_newlines(self):
         """清洗有序列表后保留列表项间 \n。"""
-        assert clean_markdown("1. a\n2. b", _cfg()) == "a\nb"
+        assert clean_markdown("1. a\n2. b", _all_on()) == "a\nb"
 
     def test_clean_blockquote(self):
-        assert clean_markdown("> 引用", _cfg()) == "引用"
+        assert clean_markdown("> 引用", _all_on()) == "引用"
 
     def test_clean_blockquote_preserves_paragraph_break(self):
         """清洗引用后保留与后续段落的段落分隔。"""
-        result = clean_markdown("> 1% 用户 → 没问题\n\n每个阶段", _cfg(blank_line=False))
+        result = clean_markdown("> 1% 用户 → 没问题\n\n每个阶段", _all_on(blank_line=False))
         assert result == "1% 用户 → 没问题\n\n每个阶段"
 
     def test_clean_mixed_format(self):
         text = "**粗体** 和 *斜体* 和 ~~删除~~ 和 `代码`"
-        result = clean_markdown(text, _cfg())
+        result = clean_markdown(text, _all_on())
         assert result == "粗体 和 斜体 和 删除 和 代码"
 
     def test_plain_text_passthrough(self):
-        assert clean_markdown("普通文本", _cfg()) == "普通文本"
+        assert clean_markdown("普通文本", _all_on()) == "普通文本"
 
     def test_empty_text(self):
-        assert clean_markdown("", _cfg()) == ""
+        assert clean_markdown("", _all_on()) == ""
 
 
 class TestKaomojiSafe:
     def test_kaomoji_with_star_not_stripped(self):
-        result = clean_markdown("**粗体**(￣▽￣*)", _cfg())
+        result = clean_markdown("**粗体**(￣▽￣*)", _all_on())
         assert result == "粗体(￣▽￣*)"
 
     def test_kaomoji_with_underscore(self):
-        result = clean_markdown("(｀・ω・´)b", _cfg())
+        result = clean_markdown("(｀・ω・´)b", _all_on())
         assert result == "(｀・ω・´)b"
 
     def test_kaomoji_with_tilde(self):
-        result = clean_markdown("(。-´ω´-)", _cfg())
+        result = clean_markdown("(。-´ω´-)", _all_on())
         assert result == "(。-´ω´-)"
 
 
 class TestPartialClean:
     def test_bold_off_keeps_markup(self):
-        result = clean_markdown("**加粗** *斜体*", _cfg(bold=False))
+        result = clean_markdown("**加粗** *斜体*", _all_on(bold=False))
         assert result == "**加粗** 斜体"
 
     def test_italic_off_keeps_markup(self):
-        result = clean_markdown("**加粗** *斜体*", _cfg(italic=False))
+        result = clean_markdown("**加粗** *斜体*", _all_on(italic=False))
         assert result == "加粗 *斜体*"
 
     def test_unordered_off_ordered_on(self):
-        result = clean_markdown("- 无序\n1. 有序", _cfg(list_unordered=False, list_ordered=True))
+        result = clean_markdown("- 无序\n1. 有序", _all_on(list_unordered=False, list_ordered=True))
         assert "- 无序" in result
         assert "有序" in result
         assert "1." not in result
 
     def test_ordered_off_unordered_on(self):
-        result = clean_markdown("- 无序\n1. 有序", _cfg(list_unordered=True, list_ordered=False))
+        result = clean_markdown("- 无序\n1. 有序", _all_on(list_unordered=True, list_ordered=False))
         assert "无序" in result
         assert "- " not in result
         assert "1. 有序" in result
 
     def test_all_off_returns_original(self):
         text = "**粗体** *斜体* ~~删除~~ `代码` [链接](x)"
-        assert clean_markdown(text, _cfg(
+        assert clean_markdown(text, _all_on(
             bold=False, italic=False, strikethrough=False,
             inline_code=False, link=False,
         )) == text
@@ -132,16 +132,16 @@ class TestPartialClean:
 
 class TestEdgeCases:
     def test_unclosed_marker_preserved(self):
-        result = clean_markdown("**没闭合", _cfg())
+        result = clean_markdown("**没闭合", _all_on())
         assert result == "**没闭合"
 
     def test_nested_format(self):
-        result = clean_markdown("**粗体*斜体*混排**", _cfg())
+        result = clean_markdown("**粗体*斜体*混排**", _all_on())
         assert result == "粗体斜体混排"
 
     def test_multiline(self):
         text = "# 标题\n\n**粗体** 内容\n\n- 列表1\n- 列表2"
-        result = clean_markdown(text, _cfg())
+        result = clean_markdown(text, _all_on())
         assert "标题" in result
         assert "粗体" in result
         assert "列表1" in result
@@ -152,20 +152,20 @@ class TestEdgeCases:
 class TestDividerAndBlankLine:
     def test_divider_clean_removes_mark(self):
         """清洗分隔线：独立 --- 行删除，段落分隔保留。"""
-        assert clean_markdown("上\n\n---\n\n下", _cfg(blank_line=False)) == "上\n\n下"
+        assert clean_markdown("上\n\n---\n\n下", _all_on(blank_line=False)) == "上\n\n下"
 
     def test_divider_clean_off_keeps_mark(self):
         """清洗分隔线关：--- 行保留。"""
-        assert clean_markdown("上\n\n---\n\n下", _cfg(divider=False, blank_line=False)) == "上\n\n---\n\n下"
+        assert clean_markdown("上\n\n---\n\n下", _all_on(divider=False, blank_line=False)) == "上\n\n---\n\n下"
 
     def test_blank_line_collapse(self):
         """清洗连续换行：空行压为单个换行。"""
-        assert clean_markdown("上\n\n下", _cfg()) == "上\n下"
+        assert clean_markdown("上\n\n下", _all_on()) == "上\n下"
 
     def test_blank_line_off_keeps_break(self):
         """清洗连续换行关：空行保留。"""
-        assert clean_markdown("上\n\n下", _cfg(blank_line=False)) == "上\n\n下"
+        assert clean_markdown("上\n\n下", _all_on(blank_line=False)) == "上\n\n下"
 
     def test_divider_and_blank_line_compose(self):
         """分隔线 + 连续换行同时清洗：--- 消失且空行压平。"""
-        assert clean_markdown("上\n\n---\n\n下", _cfg()) == "上\n下"
+        assert clean_markdown("上\n\n---\n\n下", _all_on()) == "上\n下"

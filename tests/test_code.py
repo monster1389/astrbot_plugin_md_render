@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
-from render import renderer
+from render import canvas, renderer
 from render.code_render import build_page, render_code
 from render.parser import CodeBlock
 
@@ -28,7 +28,7 @@ class TestBuildPage:
         """布局规则排在配色之后，才能覆盖 pygments 的底色与字体样式。"""
         _, css = build_page("x = 1", "python")
         assert css.index(".hl .k") < css.index("pre.hl{")
-        assert "max-width:1080px" in css
+        assert f"max-width:{canvas.MAX_WIDTH}px" in css
         assert "white-space:pre-wrap" in css
         assert "tab-size:4" in css
         assert "font-style:normal" in css  # 关掉合成斜体
@@ -74,13 +74,13 @@ class TestRenderCode:
         wide = Image.open(io.BytesIO(
             render_code(CodeBlock(lang="python", code="a = 1 + 2 + 3 + 4 + 5 + 6"))
         )).width
-        assert 27 * 2 < narrow < wide < 1080
+        assert 27 * 2 < narrow < wide < canvas.MAX_WIDTH
 
     def test_long_line_is_wrapped_at_max_width(self):
-        """超长行由 CSS max-width 折行，画布封顶 1080，不做二次渲染。"""
+        """超长行由 CSS max-width 折行，画布封顶 MAX_WIDTH，不做二次渲染。"""
         code = "x = " + " + ".join(f"value_{i}" for i in range(40))
         image = Image.open(io.BytesIO(render_code(CodeBlock(lang="python", code=code))))
-        assert image.width == 1080
+        assert image.width == canvas.MAX_WIDTH
         assert image.height > 53 + 27 * 2  # 至少两行
 
     def test_empty_code_keeps_legacy_size(self):

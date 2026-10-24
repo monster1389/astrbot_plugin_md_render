@@ -5,13 +5,12 @@ import os
 import pytest
 from PIL import Image
 
-from render import font, renderer
+from render import canvas, font, renderer
+from render.expr_render import Formula
 from render.parser import parse
 from render.table_domain import RichCell, Span, Table
 from render.table_domain import table_to_markdown
 from render.table_render import (
-    _FONT_SIZE,
-    _MAX_WIDTH,
     _Layout,
     _cell,
     _decorate,
@@ -35,11 +34,10 @@ def _text_cell(text: str, align: str = "") -> RichCell:
 
 
 def _layout_of(table: Table) -> _Layout:
-    measure = font.measure_font(_FONT_SIZE)
-    cache: dict = {}
+    measure = font.measure_font(canvas.TABLE_SIZE)
     return _Layout(
-        header=[_cell(c, measure, cache) for c in table.headers],
-        rows=[[_cell(c, measure, cache) for c in row] for row in table.rows],
+        header=[_cell(c, measure, header=True) for c in table.headers],
+        rows=[[_cell(c, measure) for c in row] for row in table.rows],
         n_cols=max([len(table.headers)] + [len(r) for r in table.rows] + [1]),
     )
 
@@ -61,12 +59,12 @@ class TestPlanWidths:
         widths = plan_widths([200, 4000], [200, 100])
         assert widths[0] == 200
         assert widths[1] > widths[0] * 3
-        assert sum(widths) <= _MAX_WIDTH
+        assert sum(widths) <= canvas.MAX_WIDTH
 
     def test_many_columns_compressed(self):
         """列太多：等比压缩，总宽不超上限，各列等宽。"""
         widths = plan_widths([600] * 8, [100] * 8)
-        assert sum(widths) <= _MAX_WIDTH
+        assert sum(widths) <= canvas.MAX_WIDTH
         assert len(set(widths)) == 1
 
     def test_header_raises_floor(self):
@@ -82,16 +80,16 @@ class TestCellSerialization:
     """单元格 → HTML：转义、格式嵌套、公式图。"""
 
     def test_escapes_markup(self):
-        measure = font.measure_font(_FONT_SIZE)
-        cell = _cell(_text_cell("<div> & 引号"), measure, {})
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        cell = _cell(_text_cell("<div> & 引号"), measure)
         assert "&lt;div&gt;" in cell.html
         assert "&amp;" in cell.html
         assert "<div>" not in cell.html
 
     def test_escapes_link_url(self):
-        measure = font.measure_font(_FONT_SIZE)
+        measure = font.measure_font(canvas.TABLE_SIZE)
         span = Span(text="链接", link_url='https://x.y/?a=1&b="2"')
-        html = _cell(RichCell(spans=[span]), measure, {})
+        html = _cell(RichCell(spans=[span]), measure)
         assert 'href="https://x.y/?a=1&amp;b=&quot;2&quot;"' in html.html
 
     def test_nested_format_order(self):
@@ -99,23 +97,62 @@ class TestCellSerialization:
         assert _decorate("x", span) == "<b><i><code>x</code></i></b>"
 
     def test_empty_cell_keeps_height(self):
-        measure = font.measure_font(_FONT_SIZE)
-        cell = _cell(RichCell(spans=[Span(text="")]), measure, {})
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        cell = _cell(RichCell(spans=[Span(text="")]), measure)
         assert cell.html == "&nbsp;"
 
     def test_math_rendered_as_image(self, monkeypatch):
-        """格内 $...$ 变成 img，纯货币符号不触发渲染。"""
+        """格内 $...$ 变成 img，尺寸来自公式图；纯货币符号不触发渲染。"""
         calls: list[str] = []
-        image = Image.new("RGBA", (40, 20), (0, 0, 0, 255))
         monkeypatch.setattr(
-            "render.table_render.render_expr_image",
-            lambda src, **kw: calls.append(src) or image,
+            "render.table_render.formula_image",
+            lambda src, **kw: calls.append(src) or Formula(png=b"png", width=40, height=20),
         )
-        measure = font.measure_font(_FONT_SIZE)
-        _cell(_text_cell("$x^2+1$"), measure, {})
-        _cell(_text_cell("$5"), measure, {})
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        cell = _cell(_text_cell("$x^2+1$"), measure)
+        _cell(_text_cell("$5"), measure)
         assert calls == ["x^2+1"]
+        assert "width:40px" in cell.html
+        assert "height:20px" in cell.html
 
+    def test_broken_formula_falls_back_to_literal(self, monkeypatch):
+        """一格公式失败只坏这一格：退回 $...$ 原文，不拖整表。"""
+        def boom(src, **kw):
+            raise RuntimeError("LaTeX 渲染失败：\\ce{H2O}")
+
+        monkeypatch.setattr("render.table_render.formula_image", boom)
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        cell = _cell(_text_cell("$\\ce{H2O}$"), measure)
+        assert "<img" not in cell.html
+        assert "$\\ce{H2O}$" in cell.html
+
+    def test_header_cell_uses_header_role(self, monkeypatch):
+        """表头格内公式按表头角色取默认色。"""
+        seen: dict = {}
+
+        def fake(src, **kw):
+            seen.update(kw)
+            return Formula(png=b"png", width=10, height=10)
+
+        monkeypatch.setattr("render.table_render.formula_image", fake)
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        _cell(_text_cell("$x$"), measure, header=True)
+        assert seen["role"] == "table_header"
+        assert seen["color"] is None
+
+    def test_formatted_span_overrides_role_color(self, monkeypatch):
+        """带显式格式的片段给公式一个覆盖色，纯文本片段交给角色。"""
+        seen: dict = {}
+
+        def fake(src, **kw):
+            seen.update(kw)
+            return Formula(png=b"png", width=10, height=10)
+
+        monkeypatch.setattr("render.table_render.formula_image", fake)
+        measure = font.measure_font(canvas.TABLE_SIZE)
+        _cell(RichCell(spans=[Span(text="$x$", bold=True)]), measure)
+        assert seen["role"] == "table"
+        assert seen["color"] == canvas.BOLD
 
 class TestAlignment:
     """markdown 表格对齐（:---: 等）。"""
@@ -155,7 +192,7 @@ class TestRenderTable:
         png = render_table(table)
         assert png.startswith(b"\x89PNG")
         image = Image.open(io.BytesIO(png))
-        assert _MAX_WIDTH - 6 <= image.width <= _MAX_WIDTH
+        assert canvas.MAX_WIDTH - 6 <= image.width <= canvas.MAX_WIDTH
         assert image.height > 100
 
     def test_short_table_shrinks_canvas(self):
