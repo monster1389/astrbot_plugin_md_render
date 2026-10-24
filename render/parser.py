@@ -19,6 +19,10 @@ _MATH_PLACEHOLDER_RE = re.compile(r"\x01MATHBLOCK(\d+)\x01")
 _CODE_PLACEHOLDER_PREFIX = "\x03CODE"
 _CODE_PLACEHOLDER_RE = re.compile(r"\x03CODE(\d+)\x03")
 
+# 公式内竖线占位符：markdown 表格把 | 当列分隔符，解析前必须先遮住。
+# 单字符，长度不变——换成长串会让接近 100 字上限的公式匹配失败。
+_PIPE_PLACEHOLDER = "\x04"
+
 # 判定 ```html 是否是完整文档：避免把讨论 HTML 片段的代码块渲染成图
 _HTML_DOC_RE = re.compile(r"<!doctype|<html[\s>]", re.IGNORECASE)
 
@@ -151,6 +155,43 @@ def _is_fence_close(line: str, fence_char: str, fence_len: int) -> bool:
         return False
     count = len(stripped) - len(stripped.lstrip(fence_char))
     return count >= fence_len and stripped[count:].strip() == ""
+
+
+def _protect_math_pipes(text: str) -> str:
+    """把行内公式里的 ``|`` 换成占位符，避免表格把它当成列分隔符。
+
+    只处理本解析器会认作行内公式的片段（与 ``split_inline_math`` 同一套判定），
+    公式之外的 ``|`` 原样保留，表格结构因此不受影响。
+
+    Args:
+        text: 围栏外、块级公式已提取的 markdown 文本。
+
+    Returns:
+        公式内竖线已换成占位符的文本。
+    """
+    out: list[str] = []
+    cursor = 0
+    for match in _INLINE_EXPR_RE.finditer(text):
+        body = match.group(1)
+        if "|" not in body or not _is_valid_inline_expr(body):
+            continue
+        out.append(text[cursor:match.start(1)])
+        out.append(body.replace("|", _PIPE_PLACEHOLDER))
+        cursor = match.end(1)
+    out.append(text[cursor:])
+    return "".join(out)
+
+
+def _restore_math_pipes(text: str) -> str:
+    """把占位符还原为竖线。
+
+    Args:
+        text: 可能含竖线占位符的文本。
+
+    Returns:
+        竖线已还原的文本。
+    """
+    return text.replace(_PIPE_PLACEHOLDER, "|")
 
 
 def _mask_code_spans(text: str) -> tuple[str, list[str]]:
@@ -382,7 +423,7 @@ def _pre_extract_block_math(text: str) -> tuple[str, dict[int, str]]:
         masked, codes = _mask_code_spans("".join(buf))
         buf.clear()
         first_new = len(placeholders)
-        extracted = _extract_block_math(masked, placeholders)
+        extracted = _protect_math_pipes(_extract_block_math(masked, placeholders))
         for idx in range(first_new, len(placeholders)):
             placeholders[idx] = _unmask_code_spans(placeholders[idx], codes)
         out.append(_unmask_code_spans(extracted, codes))
@@ -530,7 +571,7 @@ def split_inline_math(text: str) -> list[Segment | InlineExpr]:
     result: list[Segment | InlineExpr] = []
     cursor = 0
     for match in _INLINE_EXPR_RE.finditer(masked):
-        expr = match.group(1)
+        expr = _restore_math_pipes(match.group(1))
         if not _is_valid_inline_expr(expr):
             continue
         if match.start() > cursor:
@@ -623,7 +664,11 @@ def parse(text: str, split_blank_lines: bool = False) -> list[Segment | CodeBloc
 
         if t.type == "table_open":
             flush_buf()
-            table, i = parse_table(tokens, i, lambda s: _restore_block_math(s, block_math))
+            table, i = parse_table(
+                tokens,
+                i,
+                lambda s: _restore_math_pipes(_restore_block_math(s, block_math)),
+            )
             segments.append(table)
             continue
 

@@ -12,8 +12,9 @@ from render.parser import (
     expr_to_markdown,
     expr_to_plain,
     parse,
+    split_inline_math,
 )
-from render.table_domain import Table
+from render.table_domain import Table, table_to_markdown
 
 
 class TestCodeBlock:
@@ -126,6 +127,61 @@ class TestExpr:
         assert not any(isinstance(s, BlockExpr) for s in segments)
         plain = "".join(s.text for s in segments if isinstance(s, Segment))
         assert "`$\\frac{a}{b}$`" in plain
+
+
+class TestMathPipes:
+    """公式里的竖线不能被 markdown 表格当成列分隔符。"""
+
+    _HEAD = "| a | b | c | d |\n|---|---|---|---|\n"
+
+    def _row(self, row: str):
+        table = [
+            s for s in parse(self._HEAD + row) if isinstance(s, Table)
+        ][0]
+        return table, table.rows[0]
+
+    def test_pipe_inside_math_keeps_table_shape(self):
+        """$|\\rho| > 0.8$ 留在同一格里，后两格不再被截掉。"""
+        table, row = self._row(
+            "| 判定 | 当 $|\\rho| > 0.8$ 时认为强相关 | 文字与公式混排 | 纯文本 |"
+        )
+        assert len(table.headers) == 4
+        cells = ["".join(span.text for span in c.spans) for c in row]
+        assert cells[1] == "当 $|\\rho| > 0.8$ 时认为强相关"
+        assert cells[2] == "文字与公式混排"
+        assert cells[3] == "纯文本"
+
+    def test_pipe_math_becomes_inline_expr(self):
+        """还原后的格内文本仍能被拆成行内公式。"""
+        _, row = self._row("| 判定 | 当 $|x| > 0$ 时成立 | 说明 | 备注 |")
+        parts = split_inline_math("".join(span.text for span in row[1].spans))
+        exprs = [p.expr for p in parts if isinstance(p, InlineExpr)]
+        assert exprs == ["|x| > 0"]
+
+    def test_currency_dollars_do_not_change_shape(self):
+        """两个货币 $ 之间的 | 仍是列分隔符。"""
+        _, row = self._row("| 价格 | $5 | $10 | 备注 |")
+        cells = ["".join(span.text for span in c.spans) for c in row]
+        assert cells == ["价格", "$5", "$10", "备注"]
+
+    def test_escaped_norm_is_preserved(self):
+        """用户自己写的 \\| 是范数记号，不能被改成单竖线。"""
+        _, row = self._row("| 范数 | $\\|v\\|$ | 双竖线 | 备注 |")
+        cells = ["".join(span.text for span in c.spans) for c in row]
+        assert cells[1] == "$\\|v\\|$"
+
+    def test_pipe_math_in_paragraph(self):
+        """正文里的竖线公式照常识别。"""
+        segments = parse("绝对值 $|x|$ 与 $\\left|y\\right|$")
+        exprs = [s.expr for s in segments if isinstance(s, InlineExpr)]
+        assert exprs == ["|x|", "\\left|y\\right|"]
+
+    def test_placeholder_never_leaks(self):
+        """表格还原成 markdown 时不含任何控制字符。"""
+        table, _ = self._row("| 判定 | 当 $|x| > 0$ 时成立 | 说明 | 备注 |")
+        markdown = table_to_markdown(table)
+        assert "\x01" not in markdown
+        assert "\x04" not in markdown
 
 
 class TestBlockExpr:
