@@ -146,33 +146,72 @@ mermaid.ink 连不上，插件回退为源码。把 Mermaid 的模式改成 `仅
 
 ```mermaid
 flowchart TB
-  main["main.py<br/>入口 · 拆链 · 留尾"]
+  subgraph 入口
+    main["main.py<br/>接线 · 拆链 · 留尾"]
+  end
+  subgraph 桥接与产物
+    bridge["bridge.py<br/>组件 ↔ 产物<br/>唯一 import message_components 处"]
+    art["artifacts.py<br/>Text / Picture / SourceFile / Message"]
+  end
+  subgraph 解析与清洗
+    parser["parser.py<br/>围栏 · 公式 · 占位符"]
+    tdom["table_domain.py<br/>表格 token → Table"]
+    ifmt["inline_format.py<br/>格式状态机"]
+    mdc["md_cleaner.py<br/>清洗"]
+  end
+  subgraph 登记
+    reg["elements.py<br/>元素注册表"]
+    cfg["config.py<br/>配置载入与校验"]
+  end
+  subgraph 流水线与送达
+    chain["chain.py<br/>分组 · 并发 · 组装产物"]
+    png["png.py<br/>量化 · 读尺寸"]
+    ts["tempstore.py<br/>临时文件"]
+    deliv["deliver.py<br/>逐条发出 · 末条留尾"]
+  end
+  subgraph 渲染器
+    code["code_render.py"]
+    table["table_render.py"]
+    html["html_render.py"]
+    expr["expr_render.py"]
+    mmd["mermaid_render.py"]
+  end
+  subgraph 出图口与版面
+    rend["renderer.py<br/>takumi 单例"]
+    cvs["canvas.py<br/>底色 · 字号 · 骨架"]
+    font["font.py<br/>发现 · 族名 · 度量"]
+  end
 
-  bridge["产物与桥接<br/>artifacts · bridge<br/>Text / Picture / SourceFile"]
-  parse["解析与清洗<br/>parser · table_domain · inline_format · md_cleaner"]
-  reg["元素注册表<br/>elements"]
-  chain["流水线<br/>chain：分组 · 并发 · 按序产出"]
-  rend["渲染器<br/>code · table · expr · html · mermaid"]
-  out["出图口<br/>renderer · canvas · png"]
-  deliver["送达<br/>deliver：逐条发出，末条留尾"]
-  infra["基础设施<br/>font · config · tempstore"]
-
-  main -->|"组件 → 文本"| bridge
-  bridge -->|文本| parse
-  parse -->|片段| chain
-  chain -->|产物| bridge
-  bridge -->|组件| deliver
-  chain --> rend
-  rend -->|"code / table / html"| out
+  main -->|"组件"| bridge
+  bridge -->|文本| parser
+  parser -->|片段| chain
+  chain -->|"产物"| art
+  art -.->|"bridge 读产物"| bridge
+  bridge -->|组件| deliv
+  chain --> png
+  chain -.-> code & table & html & expr & mmd
   reg -.-> chain
-  out -.-> infra
+  cfg -.-> reg
+  ts -.-> reg
+  parser -.-> tdom
+  tdom -.-> ifmt
+  mdc -.-> ifmt
+  code -.-> cvs
+  table -.-> cvs
+  html -.-> rend
+  expr -.-> cvs
+  expr -.-> png
+  cvs -.-> rend
+  cvs -.-> font
+  rend -.-> font
+  table -.-> expr
 
   classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
   classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
   classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
-  class main,deliver deep;
-  class bridge,parse,reg,chain,rend,out mid;
-  class infra leaf;
+  class main,deliv deep;
+  class bridge,art,parser,tdom,ifmt,mdc,reg,cfg,chain,png,ts,code,table,html,expr,mmd mid;
+  class rend,cvs,font leaf;
 ```
 
-深色为入口与出口，中色为元素域与渲染器，浅色为基础设施。图只画到职责层：一个节点可能对应多个文件，逐文件职责看代码。
+深色为入口与出口，中色为元素域与渲染器，浅色为出图口与版面。
