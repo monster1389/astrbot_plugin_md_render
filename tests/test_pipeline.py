@@ -8,20 +8,18 @@ from astrbot.api.message_components import Plain, Image
 
 from render.parser import CodeBlock
 from render.config import CleanConfig, RenderConfig, SegmentConfig
+from render.elements import FAMILIES
 
 # 这些用例测链组装与顺序，fake 渲染器返回假字节，量化由 test_png.py 覆盖
 pytestmark = pytest.mark.usefixtures("no_quantize")
 
 
-def _make_cfg(**overrides):
-    """构造测试用 RenderConfig。"""
-    defaults = {
-        "code_mode": "不处理",
-        "table_mode": "不处理",
-        "expr_mode": "不处理",
-        "temp_ttl": 0,
-    }
-    return RenderConfig(**(defaults | overrides))
+def _make_cfg(temp_ttl: int = 0, **modes) -> RenderConfig:
+    """构造测试用 RenderConfig；modes 用元素族键（code/table/expr/html/mermaid）。
+
+    未指定的族一律「不处理」。
+    """
+    return RenderConfig(modes={key: "不处理" for key in FAMILIES} | modes, temp_ttl=temp_ttl)
 
 
 def _make_seg_cfg(**overrides):
@@ -82,7 +80,7 @@ class TestPlanChain:
     def test_keep_original_splits_text_and_image(self):
         """渲染且保留原文：原文文本前置，图片留末条。"""
         fake = MagicMock(return_value=b"fake_png")
-        cfg = _make_cfg(code_mode="渲染且保留原文")
+        cfg = _make_cfg(code="渲染且保留原文")
         result = _collect(
             [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: fake}
         )
@@ -113,7 +111,7 @@ class TestPlanChain:
     def test_interleaved_components_in_order(self):
         """交错元素按组件拆条，保持阅读顺序。"""
         fake = MagicMock(side_effect=lambda seg: b"png_" + seg.code.encode())
-        cfg = _make_cfg(code_mode="渲染且保留原文")
+        cfg = _make_cfg(code="渲染且保留原文")
         result = _collect(
             [Plain("正文第一行\n\n```py\nx=1\n```\n\n```py\ny=2\n```")],
             cfg, seg_cfg, None, renderers={CodeBlock: fake},
@@ -148,7 +146,7 @@ class TestPlanChain:
     def test_passes_renderers(self):
         """plan_chain 透传 renderers 到 build_chain。"""
         fake = MagicMock(return_value=b"fake_png")
-        cfg = _make_cfg(code_mode="渲染图像")
+        cfg = _make_cfg(code="渲染图像")
         result = _collect(
             [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: fake}
         )
@@ -172,7 +170,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("正文\n\n```py\nx=1\n```")], _make_cfg(code_mode="渲染图像"), seg_cfg,
+                [Plain("正文\n\n```py\nx=1\n```")], _make_cfg(code="渲染图像"), seg_cfg,
                 None, "/tmp", {CodeBlock: slow},
             )
             iterator = pipeline.__aiter__()
@@ -199,7 +197,7 @@ class TestPipelineStreaming:
         async def _run():
             pipeline = await plan_chain(
                 [Plain("```py\nslow\n```\n\n```py\nfast\n```")],
-                _make_cfg(code_mode="渲染图像"), seg_cfg, None, "/tmp", {CodeBlock: dispatch},
+                _make_cfg(code="渲染图像"), seg_cfg, None, "/tmp", {CodeBlock: dispatch},
             )
             return [m.chain[0].data async for m in pipeline]
 
@@ -211,7 +209,7 @@ class TestPipelineStreaming:
             time.sleep(0.3)
             return b"never"
 
-        cfg = _make_cfg(code_mode="渲染图像")
+        cfg = _make_cfg(code="渲染图像")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
                 [Plain("```py\nx=1\n```")], cfg, seg_cfg, None, renderers={CodeBlock: hang}
@@ -227,7 +225,7 @@ class TestPipelineStreaming:
             time.sleep(0.3)
             return b"never"
 
-        cfg = _make_cfg(code_mode="渲染且md文件")
+        cfg = _make_cfg(code="渲染且md文件")
         with patch("render.chain._RENDER_TIMEOUT", 0.01):
             result = _collect(
                 [Plain("```py\nx=1\n```")], cfg, seg_cfg, None,
@@ -245,7 +243,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("```py\nx=1\n```")], _make_cfg(code_mode="渲染且md文件"), seg_cfg, None,
+                [Plain("```py\nx=1\n```")], _make_cfg(code="渲染且md文件"), seg_cfg, None,
                 str(tmp_path), {CodeBlock: fake},
             )
             [m async for m in pipeline]
@@ -263,7 +261,7 @@ class TestPipelineStreaming:
 
         async def _run():
             pipeline = await plan_chain(
-                [Plain("```py\nx=1\n```")], _make_cfg(code_mode="渲染图像"), seg_cfg, None,
+                [Plain("```py\nx=1\n```")], _make_cfg(code="渲染图像"), seg_cfg, None,
                 "/tmp", {CodeBlock: hang},
             )
             pipeline.cancel()

@@ -15,152 +15,35 @@ from typing import Any
 from astrbot.api import logger
 from astrbot.api.message_components import File as AstrFile
 from astrbot.api.message_components import Image, Plain
-from render.code_render import render_code
 from render.config import CleanConfig, RenderConfig, SegmentConfig
-from render.expr_render import render_expr
-from render.html_render import render_html
-from render.md_cleaner import clean_markdown
-from render.mermaid_render import render_mermaid
-from render.parser import (
-    BlockExpr,
-    CodeBlock,
-    Divider,
-    HtmlDoc,
-    InlineExpr,
-    MermaidBlock,
-    Segment,
-    codeblock_to_markdown,
-    codeblock_to_plain,
-    expr_to_markdown,
-    expr_to_plain,
-    parse,
-)
+from render.elements import ELEMENTS, Element, recipe_for, text_for, writes_file
+from render.parser import Divider, Segment, parse
 from render.png import quantize
-from render.table_domain import Table, table_to_markdown, table_to_plain
-from render.table_render import render_table
 from render.tempstore import build_temp_path
 
-# 本机渲染器（pillow/typst）的保险丝（秒）：只兜住渲染器卡死，正常路径不会触发。
-# 自己有超时预算的渲染器（mermaid，走外部 HTTP）不套它，见 ElementSpec.timeout。
+# 本机渲染器（typst / pytakumi）的保险丝（秒）：只兜住渲染器卡死，正常路径不会触发。
+# 自己有超时预算的渲染器（mermaid，走外部 HTTP）不套它，见 Element.budgeted。
 _RENDER_TIMEOUT = 15.0
-
-
-@dataclass(frozen=True)
-class ModeSpec:
-    """模式 → 产物配方：text/image/file 三个插槽是否填充。
-
-    Attributes:
-        text: 是否产出原文 Plain。
-        image: 是否产出渲染 PNG。
-        file: 是否产出 .md 文件。
-    """
-    text: bool
-    image: bool
-    file: bool
-
-
-# 联合能力表：模式字符串 → 产物配方。配置边界（_conf_schema.json）保持中文字符串，
-# 此表即这些字符串唯一的解释处。各元素类型的可达模式是其子集（表达式无 md 文件模式）。
-_MODE_SPECS: dict[str, ModeSpec] = {
-    "不处理":           ModeSpec(text=True,  image=False, file=False),
-    "渲染图像":         ModeSpec(text=False, image=True,  file=False),
-    "渲染且保留原文":     ModeSpec(text=True,  image=True,  file=False),
-    "渲染且md文件":      ModeSpec(text=False, image=True,  file=True),
-    "仅md文件":         ModeSpec(text=False, image=False, file=True),
-}
-
-# 无配置模式的元素（纯文本段 / 分隔线）固定只产纯文本
-_TEXT_ONLY = ModeSpec(text=True, image=False, file=False)
-
-
-@dataclass(frozen=True)
-class ElementSpec:
-    """元素类型的渲染与文本配方。
-
-    Attributes:
-        text: 将 segment 还原为文本：清洗开启时产精简纯文本，否则产 markdown 原文。
-        render: 渲染函数，返回 PNG bytes；为 None 表示不渲染（纯文本元素）。
-        prefix: 产物文件名前缀。
-        supports_file: 是否支持产出 .md 文件。
-        mode_key: 该元素对应的 RenderConfig 模式字段名；为 None 表示固定产纯文本。
-        self_budgeted: 渲染器自带超时预算（如外部 HTTP），不套通用保险丝。
-    """
-    text: Callable[[Any, CleanConfig | None], str]
-    render: Callable[[Any], bytes] | None = None
-    prefix: str | None = None
-    supports_file: bool = False
-    mode_key: str | None = None
-    self_budgeted: bool = False
-
-
-_ELEMENT_SPECS: dict[type, ElementSpec] = {
-    CodeBlock: ElementSpec(
-        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
-        render=render_code,
-        prefix="code",
-        supports_file=True,
-        mode_key="code_mode",
-    ),
-    Table: ElementSpec(
-        text=lambda seg, cc: table_to_plain(seg) if (cc and cc.table) else table_to_markdown(seg),
-        render=render_table,
-        prefix="table",
-        supports_file=True,
-        mode_key="table_mode",
-    ),
-    HtmlDoc: ElementSpec(
-        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
-        render=render_html,
-        prefix="html",
-        mode_key="html_mode",
-    ),
-    MermaidBlock: ElementSpec(
-        text=lambda seg, cc: codeblock_to_plain(seg) if (cc and cc.code) else codeblock_to_markdown(seg),
-        render=render_mermaid,
-        prefix="mermaid",
-        supports_file=True,
-        mode_key="mermaid_mode",
-        self_budgeted=True,
-    ),
-    InlineExpr: ElementSpec(
-        text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
-        render=render_expr,
-        prefix="expr",
-        mode_key="expr_mode",
-    ),
-    BlockExpr: ElementSpec(
-        text=lambda seg, cc: expr_to_plain(seg) if (cc and cc.expr) else expr_to_markdown(seg),
-        render=render_expr,
-        prefix="expr",
-        mode_key="expr_mode",
-    ),
-    Segment: ElementSpec(
-        text=lambda seg, cc: clean_markdown(seg.text, cc) if cc is not None else seg.text,
-    ),
-    Divider: ElementSpec(
-        text=lambda seg, cc: "\n\n---\n\n" if not (cc and cc.divider) else "\n\n",
-    ),
-}
 
 
 def _renderer_for(
     seg_type: type,
-    spec: ElementSpec,
+    element: Element,
     renderers: dict[type, Callable] | None,
 ) -> Callable[[Any], Any]:
-    """按覆盖层解析 segment 类型的渲染器，未覆盖回退 spec.render。
+    """按覆盖层解析 segment 类型的渲染器，未覆盖回退 element.render。
 
     Args:
         seg_type: segment 类型。
-        spec: 元素配方。
-        renderers: 渲染器覆盖层，为 None 或未含该类型时回退 spec.render。
+        element: 元素条目。
+        renderers: 渲染器覆盖层，为 None 或未含该类型时回退 element.render。
 
     Returns:
         渲染函数。
     """
     if renderers and seg_type in renderers:
         return renderers[seg_type]
-    return spec.render
+    return element.render
 
 
 async def _render_one(renderer: Callable[[Any], Any], seg: Any) -> bytes:
@@ -181,21 +64,6 @@ async def _render_one(renderer: Callable[[Any], Any], seg: Any) -> bytes:
     else:
         png = await asyncio.to_thread(renderer, seg)
     return await asyncio.to_thread(quantize, png)
-
-
-def _recipe_for(spec: ElementSpec, cfg: RenderConfig) -> ModeSpec:
-    """读取元素配方对应的产物配方。
-
-    Args:
-        spec: 元素配方。
-        cfg: 渲染配置。
-
-    Returns:
-        该元素本次应填充的产物配方；无模式字段的纯文本元素固定产文本。
-    """
-    if spec.mode_key is None:
-        return _TEXT_ONLY
-    return _MODE_SPECS[getattr(cfg, spec.mode_key)]
 
 
 def _append_image(chain: list, png_bytes: bytes, prefix: str, cfg: RenderConfig, data_dir: str) -> None:
@@ -240,7 +108,7 @@ def _dispatch(
     clean_cfg: CleanConfig | None,
     data_dir: str,
 ) -> None:
-    """按 (元素类型, 模式) 配方组装组件到消息链。
+    """按 (元素, 模式) 配方组装组件到消息链。
 
     Args:
         chain: 目标消息链列表。
@@ -250,23 +118,24 @@ def _dispatch(
         clean_cfg: 清洗配置，为 None 时不清洗。
         data_dir: 插件数据目录路径。
     """
-    spec = _ELEMENT_SPECS[type(seg)]
-    recipe = _recipe_for(spec, cfg)
+    element = ELEMENTS[type(seg)]
+    recipe = recipe_for(element, cfg.modes)
+    can_file = writes_file(element)
 
     # 渲染失败：没有原文可看就出 .md（文件是渲染不出来时的保底形态）
     if recipe.image and result is None:
-        if not recipe.text and spec.supports_file and spec.prefix:
-            _append_file(chain, spec.text(seg, None), spec.prefix, data_dir)
+        if not recipe.text and can_file:
+            _append_file(chain, element.text.to_markdown(seg), element.prefix, data_dir)
         else:
-            chain.append(Plain(spec.text(seg, clean_cfg)))
+            chain.append(Plain(text_for(element, seg, clean_cfg)))
         return
 
     if recipe.text:
-        chain.append(Plain(spec.text(seg, clean_cfg)))
+        chain.append(Plain(text_for(element, seg, clean_cfg)))
     if recipe.image:
-        _append_image(chain, result, spec.prefix, cfg, data_dir)
-    if recipe.file and spec.supports_file:
-        _append_file(chain, spec.text(seg, None), spec.prefix, data_dir)
+        _append_image(chain, result, element.prefix, cfg, data_dir)
+    if recipe.file and can_file:
+        _append_file(chain, element.text.to_markdown(seg), element.prefix, data_dir)
 
 
 async def build_chain(
@@ -279,14 +148,14 @@ async def build_chain(
     """将解析后的 Segment 列表转换为 AstrBot Component 列表。
 
     并发提交渲染任务到线程池，全部完成后按原顺序组装；每个元素加通用保险丝，
-    自带超时预算的渲染器（self_budgeted）不套。
+    自带超时预算的渲染器（budgeted）不套。
 
     Args:
         segments: parser.parse() 输出的 Segment 列表。
         cfg: 渲染配置。
         clean_cfg: 清洗配置，为 None 时跳过清洗。
         data_dir: 插件数据目录路径。
-        renderers: 渲染器覆盖层，为 None 或未覆盖时用元素配方默认渲染器。
+        renderers: 渲染器覆盖层，为 None 或未覆盖时用元素注册表里的渲染器。
 
     Returns:
         AstrBot Component 对象列表。
@@ -295,13 +164,13 @@ async def build_chain(
     indices: list[int] = []
     coros: list[asyncio.Future] = []
     for i, seg in enumerate(segments):
-        spec = _ELEMENT_SPECS.get(type(seg))
-        if spec is None or spec.render is None:
+        element = ELEMENTS[type(seg)]
+        if element.render is None:
             continue
-        if _recipe_for(spec, cfg).image:
+        if recipe_for(element, cfg.modes).image:
             indices.append(i)
-            coro = _render_one(_renderer_for(type(seg), spec, renderers), seg)
-            coros.append(coro if spec.self_budgeted else asyncio.wait_for(coro, _RENDER_TIMEOUT))
+            coro = _render_one(_renderer_for(type(seg), element, renderers), seg)
+            coros.append(coro if element.budgeted else asyncio.wait_for(coro, _RENDER_TIMEOUT))
 
     # 并发执行
     if coros:
@@ -340,9 +209,8 @@ def _is_plain(comp: Any) -> bool:
     )
 
 
-# 块级元素：代码块、HTML 文档、Mermaid 图表、表格、块级表达式。自身独立成组，
-# 前后的纯文本与行内表达式各并成一组（keep_whole）。
-_BLOCK_TYPES: tuple[type, ...] = (CodeBlock, Table, BlockExpr, HtmlDoc, MermaidBlock)
+# 块级元素自身独立成组，前后的纯文本与行内表达式各并成一组（keep_whole）。
+# 哪些元素算块级由元素注册表的 Element.block 决定。
 
 
 @dataclass(frozen=True)
@@ -367,8 +235,8 @@ def group_segments(
     切分点有三类：
       - 分隔线（分隔线=切分）：`---` 作为断点，本身不进入消息。
       - 空行（连续换行=切分）：相邻纯文本段之间断开。
-      - 块级元素（代码块/表格/块级表达式/HTML 文档/Mermaid 图表）：自身独立一组，前后的纯文本
-        与行内表达式各并成一组。
+      - 块级元素（代码块/表格/块级表达式/HTML 文档/Mermaid 图表，即注册表里 block=True 的元素）：
+        自身独立一组，前后的纯文本与行内表达式各并成一组。
 
     keep_whole=True 的组（纯文本段 + 行内表达式）整组合并成一条消息，
     行内表达式图片与相邻文字同条展示；keep_whole=False 的块级组逐组件
@@ -392,7 +260,7 @@ def group_segments(
                 continue
             current.append(seg)
             continue
-        if isinstance(seg, _BLOCK_TYPES):
+        if ELEMENTS[type(seg)].block:
             if current:
                 groups.append(SegmentGroup(current, keep_whole=True))
                 current = []

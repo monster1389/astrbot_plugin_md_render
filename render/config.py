@@ -6,27 +6,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from render.elements import FAMILIES
+
+# 「渲染」块里不属于元素模式的两个配置项
+_HTML_WIDTH_KEY = "HTML 宽度"
+_TEMP_TTL_KEY = "临时文件存活"
+
 
 @dataclass(frozen=True)
 class RenderConfig:
     """渲染配置。
 
     Attributes:
-        code_mode: 代码块处理模式。
-        table_mode: 表格处理模式。
-        expr_mode: 数学表达式处理模式。
+        modes: 元素族键 → 处理模式（族键见 elements.FAMILIES）。
         temp_ttl: 临时文件存活分钟数（0=发送完成后立即删除）。
-        html_mode: HTML 文档处理模式。
-        mermaid_mode: Mermaid 图表处理模式。
         html_width: HTML 文档渲染宽度（像素）。
         model_only: 仅处理模型回复（根级配置，非「渲染」块内）。
     """
-    code_mode: str
-    table_mode: str
-    expr_mode: str
+    modes: dict[str, str]
     temp_ttl: int
-    html_mode: str = "渲染图像"
-    mermaid_mode: str = "渲染图像"
     html_width: int = 1000
     model_only: bool = False
 
@@ -83,29 +81,57 @@ class CleanConfig:
     expr: bool = False
 
 
+def _load_modes(render_raw: dict) -> dict[str, str]:
+    """按元素注册表读取各元素的渲染模式并校验。
+
+    Args:
+        render_raw: 配置字典「渲染」块的原始内容。
+
+    Returns:
+        元素族键 → 模式字符串。
+
+    Raises:
+        ValueError: 出现注册表未声明的配置项，或模式不在该元素的可达模式内。
+    """
+    known = {config.label for config in FAMILIES.values()} | {_HTML_WIDTH_KEY, _TEMP_TTL_KEY}
+    unknown = set(render_raw) - known
+    if unknown:
+        raise ValueError(f"未知的渲染配置项：{'、'.join(sorted(unknown))}")
+
+    modes: dict[str, str] = {}
+    for config in FAMILIES.values():
+        mode = render_raw.get(config.label, config.default)
+        if mode not in config.modes:
+            raise ValueError(
+                f"「{config.label}」不支持模式 {mode!r}，可选：{'/'.join(config.modes)}"
+            )
+        modes[config.key] = mode
+    return modes
+
+
 def load_config(raw: dict) -> tuple[RenderConfig, SegmentConfig, CleanConfig]:
     """从 AstrBot 原始配置字典构造 RenderConfig、SegmentConfig 和 CleanConfig。
 
     适配三块嵌套配置结构：raw["渲染"]、raw["分段"]、raw["清洗"]。
+    元素模式的配置项名与默认值来自元素注册表（render.elements.FAMILIES）。
 
     Args:
         raw: AstrBot 配置字典。
 
     Returns:
         (RenderConfig, SegmentConfig, CleanConfig) 元组。
+
+    Raises:
+        ValueError: 渲染模式或渲染配置项不认识。
     """
     render_raw = raw.get("渲染", {})
     segment_raw = raw.get("分段", {})
     clean_raw = raw.get("清洗", {})
 
     render_cfg = RenderConfig(
-        code_mode=render_raw.get("代码块", "渲染且md文件"),
-        table_mode=render_raw.get("表格", "渲染图像"),
-        expr_mode=render_raw.get("表达式", "渲染图像"),
-        temp_ttl=int(render_raw.get("临时文件存活", 3)),
-        html_mode=render_raw.get("HTML", "渲染图像"),
-        mermaid_mode=render_raw.get("Mermaid", "渲染图像"),
-        html_width=int(render_raw.get("HTML 宽度", 1000)),
+        modes=_load_modes(render_raw),
+        temp_ttl=int(render_raw.get(_TEMP_TTL_KEY, 3)),
+        html_width=int(render_raw.get(_HTML_WIDTH_KEY, 1000)),
         model_only=bool(raw.get("仅处理模型回复", False)),
     )
 

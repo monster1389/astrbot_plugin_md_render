@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 
+import pytest
+
 from render.config import (
     RenderConfig,
     load_config,
@@ -13,13 +15,14 @@ class TestLoadConfig:
     def test_defaults(self):
         raw = {}
         render_cfg, seg_cfg, clean_cfg = load_config(raw)
-        assert render_cfg.code_mode == "渲染且md文件"
-        assert render_cfg.table_mode == "渲染图像"
-        assert render_cfg.expr_mode == "渲染图像"
+        assert render_cfg.modes == {
+            "code": "渲染且md文件",
+            "table": "渲染图像",
+            "html": "渲染图像",
+            "mermaid": "渲染图像",
+            "expr": "渲染图像",
+        }
         assert render_cfg.temp_ttl == 3
-        assert render_cfg.html_mode == "渲染图像"
-        assert render_cfg.mermaid_mode == "渲染图像"
-        assert render_cfg.html_width == 1000
         assert render_cfg.model_only is False
         assert seg_cfg.divider_mode == "切分"
         assert seg_cfg.blank_line_mode == "切分"
@@ -61,12 +64,14 @@ class TestLoadConfig:
             "仅处理模型回复": True,
         }
         render_cfg, seg_cfg, clean_cfg = load_config(raw)
-        assert render_cfg.code_mode == "渲染图像"
-        assert render_cfg.table_mode == "渲染且保留原文"
-        assert render_cfg.expr_mode == "渲染图像"
+        assert render_cfg.modes == {
+            "code": "渲染图像",
+            "table": "渲染且保留原文",
+            "html": "渲染且保留原文",
+            "mermaid": "不处理",
+            "expr": "渲染图像",
+        }
         assert render_cfg.temp_ttl == 10
-        assert render_cfg.html_mode == "渲染且保留原文"
-        assert render_cfg.mermaid_mode == "不处理"
         assert render_cfg.html_width == 800
         assert render_cfg.model_only is True
         assert seg_cfg.divider_mode == "不处理"
@@ -74,6 +79,24 @@ class TestLoadConfig:
         assert seg_cfg.send_delay is False
         assert clean_cfg.bold is False
         assert clean_cfg.italic is True
+
+    def test_unknown_mode_raises(self):
+        """模式拼错就载入时报错，不在发消息途中炸。"""
+        raw = {"渲染": {"代码块": "渲染且txt"}}
+        with pytest.raises(ValueError, match="代码块"):
+            load_config(raw)
+
+    def test_mode_outside_element_subset_raises(self):
+        """表达式没有 md 文件模式，配了也不认。"""
+        raw = {"渲染": {"表达式": "仅md文件"}}
+        with pytest.raises(ValueError, match="表达式"):
+            load_config(raw)
+
+    def test_unknown_render_key_raises(self):
+        """渲染块里多出不认识的配置项就报错。"""
+        raw = {"渲染": {"代码段": "不处理"}}
+        with pytest.raises(ValueError, match="代码段"):
+            load_config(raw)
 
     def test_clean_config_partial(self):
         """清洗配置部分覆盖。"""
@@ -91,14 +114,9 @@ class TestLoadConfig:
 
 class TestRenderConfig:
     def test_frozen(self):
-        cfg = RenderConfig(
-            code_mode="渲染且txt",
-            table_mode="渲染图像",
-            expr_mode="渲染图像",
-            temp_ttl=5,
-        )
+        cfg = RenderConfig(modes={"code": "渲染图像"}, temp_ttl=5)
         try:
-            cfg.code_mode = "xxx"
+            cfg.temp_ttl = 6
             assert False, "should have raised FrozenInstanceError"
         except FrozenInstanceError:
             pass

@@ -6,6 +6,7 @@ from PIL import Image
 
 from render.chain import build_chain
 from render.config import RenderConfig
+from render.elements import FAMILIES
 from render.parser import CodeBlock
 from render.png import quantize
 from render.theme import BG, page
@@ -69,9 +70,7 @@ class TestChainQuantizesProduct:
 
         fake = MagicMock(return_value=_PNG_1PX)
         cfg = RenderConfig(
-            code_mode="渲染图像",
-            table_mode="不处理",
-            expr_mode="不处理",
+            modes={key: "不处理" for key in FAMILIES} | {"code": "渲染图像"},
             temp_ttl=0,
         )
         result = asyncio.run(

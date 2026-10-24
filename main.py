@@ -26,6 +26,7 @@ from render import renderer  # noqa: E402
 from render.chain import Pipeline, plan_chain  # noqa: E402
 from render.config import load_config  # noqa: E402
 from render.deliver import deliver  # noqa: E402
+from render.elements import FAMILIES  # noqa: E402
 from render.tempstore import start as _start_cleaner  # noqa: E402
 from render.tempstore import stop as _stop_cleaner  # noqa: E402
 
@@ -97,19 +98,14 @@ class MdRenderPlugin(Star):
             pipeline: 已消费完的渲染流水线。
         """
         total = pipeline.image_count + pipeline.file_count
-        if total > 0:
-            parts: list[str] = []
-            if self.cfg.code_mode != "不处理":
-                parts.append(f"代码块({self.cfg.code_mode})")
-            if self.cfg.table_mode != "不处理":
-                parts.append(f"表格({self.cfg.table_mode})")
-            if self.cfg.expr_mode != "不处理":
-                parts.append(f"表达式({self.cfg.expr_mode})")
-            if self.cfg.html_mode != "不处理":
-                parts.append(f"HTML({self.cfg.html_mode})")
-            if self.cfg.mermaid_mode != "不处理":
-                parts.append(f"Mermaid({self.cfg.mermaid_mode})")
-            logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
+        if total <= 0:
+            return
+        parts = [
+            f"{config.label}({self.cfg.modes[config.key]})"
+            for config in FAMILIES.values()
+            if self.cfg.modes[config.key] != "不处理"
+        ]
+        logger.info("已渲染 %d 项 (%s)", total, " ".join(parts))
 
     async def terminate(self):
         """插件销毁。"""

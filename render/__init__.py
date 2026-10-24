@@ -10,6 +10,7 @@ table_render   : 表格测量与 flex 布局 + pytakumi 出图。
 html_render    : 抽 <style> 后交 pytakumi 出图。
 expr_render    : Typst 渲染数学表达式。
 mermaid_render : mermaid.ink 远端渲染。
+elements       : 元素注册表：一种元素怎么渲染、怎么还原文本、走哪个配置项。
 chain          : 异步并发组装消息链。
 config         : 渲染/分段/清洗配置。
 """

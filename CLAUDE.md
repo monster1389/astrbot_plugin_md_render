@@ -83,7 +83,8 @@ flowchart LR
     main["main.py<br/>插件入口"]
   end
   subgraph 组装
-    chain["chain.py<br/>配方 + 分组 + 拆条 + 管线"]
+    chain["chain.py<br/>分组 + 拆条 + 管线"]
+    elem["elements.py<br/>元素注册表"]
   end
   subgraph 元素域
     parser["parser.py<br/>解析 + 类型"]
@@ -112,6 +113,7 @@ flowchart LR
   main --> ts
   chain --> code_r
   chain --> cfg
+  chain --> elem
   chain --> expr_r
   chain --> html_r
   chain --> mdc
@@ -130,12 +132,21 @@ flowchart LR
   table_r --> tdom
   table_r --> font
   tdom --> ifmt
+  cfg --> elem
+  main --> elem
+  ts --> elem
+  elem --> code_r
+  elem --> expr_r
+  elem --> html_r
+  elem --> mdc
+  elem --> mmd_r
+  elem --> table_r
 
   classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
   classDef mid fill:#e0e7ff,stroke:#6366f1,color:#312e81;
   classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
   class main,chain deep;
-  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv mid;
+  class parser,tdom,ifmt,mdc,code_r,table_r,expr_r,html_r,mmd_r,deliv,elem mid;
   class font,cfg,ts leaf;
 ```
 
@@ -144,7 +155,8 @@ flowchart LR
 ### 配置与基础设施
 
 配置与基础设施各自独立成模块：
-- `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造
+- `render/elements.py` — 元素注册表：每种元素一条 `Element`（渲染函数、两种文本配方、配置身份、清洗开关、是否块级、是否自带超时预算），`FAMILIES` 是元素族视图。加一种元素只改这里；分组、模式查表、产物前缀、配置读取、日志汇总都由它派生
+- `render/config.py` — `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + `load_config(raw)` 从 AstrBot 配置字典构造；`RenderConfig.modes` 是元素族键 → 模式，模式名与默认值来自注册表，未知配置项或不可达模式载入即 `ValueError`
 - `render/font.py` — 字体服务：`init_font(data_dir)` / `find_font_spec()` / `get_font(size)`，返回 `FontSpec(path, index)`；候选顺序 `data_dir/fonts/SarasaMonoSC-Regular.ttf`（手动放置，不自动下载）→ 系统 Noto Sans Mono CJK SC（`NotoSansCJK-Regular.ttc` 第 7 个 face）→ 文泉驿等宽（第 1 个 face）→ DejaVu Sans Mono，按字号缓存。ttc 必须带 face，第 0 个是比例字体
 - `render/tempstore.py` — 临时文件命名 `build_temp_path(data_dir, prefix, ext)` / 删除 / 刷新 + 后台按 TTL 清扫
 
@@ -160,12 +172,13 @@ flowchart LR
 | `render/expr_render.py` | Typst 渲染 LaTeX（tylax 做 LaTeX→Typst 转换）。`render_expr_image` 返回透明底图像供表格嵌入，`render_expr` 返回 PNG bytes；转换或编译失败抛给上层回退原文 |
 | `render/html_render.py` | pytakumi（无浏览器）渲染完整 HTML 文档，抽 `<style>` 传 `stylesheets`，注册中文字体 |
 | `render/mermaid_render.py` | mermaid.ink 外部服务渲染图表，`httpx.AsyncClient` 异步请求（不占线程池）；进程内单通道串行（服务拒绝并发），单张 10s，4xx 不重试、5xx 重试一次，失败抛给上层改发 `.md` |
-| `render/chain.py` | 配方表 `_ELEMENT_SPECS` + 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（本机渲染器 15s 保险丝，自管预算的 mermaid 不套） |
+| `render/elements.py` | 元素注册表 `ELEMENTS`（类型 → Element）+ `FAMILIES`（族键 → 配置身份）+ `recipe_for`/`text_for`/`writes_file`。加一种元素只登记一处 |
+| `render/chain.py` | 分组/拆条 + `plan_chain` 提交渲染任务 + `Pipeline` 按序逐条产出（本机渲染器 15s 保险丝，自管预算的 mermaid 不套） |
 | `render/md_cleaner.py` | markdown-it-py token 遍历清洗 markdown 格式标记 |
 | `render/deliver.py` | 按序发送 + 删临时文件，末条留尾（AstrBot 无关，经 send 回调注入） |
-| `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫 |
+| `render/tempstore.py` | 临时文件命名/删除/刷新 + 后台 TTL 清扫；产物前缀由元素注册表的族键派生 |
 | `render/font.py` | 字体发现（`FontSpec` 含 ttc face index）+ 按字号缓存 |
-| `render/config.py` | `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + 配置加载 |
+| `render/config.py` | `RenderConfig`/`SegmentConfig`/`CleanConfig` dataclass + 配置加载（模式集由注册表驱动，载入时校验） |
 
 ### 关键 API
 

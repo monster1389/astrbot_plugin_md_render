@@ -4,11 +4,15 @@
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-from render.config import CleanConfig
 from render.inline_format import FormatState, advance
+
+if TYPE_CHECKING:
+    from render.config import CleanConfig
 
 
 def clean_markdown(text: str, cfg: CleanConfig) -> str:

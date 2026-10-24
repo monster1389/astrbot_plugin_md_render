@@ -22,8 +22,10 @@ AstrBot 插件，在 `OnDecoratingResultEvent` 阶段把消息中的 markdown **
 ## 流水线（pipeline）
 
 - **渲染模式 mode**：每类元素可达的产物配方，中文配置串是唯一解释处。code/table/mermaid 支持全部 5 种（不处理 / 渲染图像 / 渲染且保留原文 / 渲染且md文件 / 仅md文件），表达式与 HTML 只支持前 3 种。
+- **元素 Element**：一种 markdown 元素的全部事实 —— 渲染函数、两种文本配方（裸文本 / markdown 原文）、配置身份、由哪个清洗开关管、是否块级、是否自带超时预算。唯一登记处是 `render/elements.py` 的 `ELEMENTS`。
+- **元素族 family**：共用一个配置项与一个产物前缀的元素类型集合。`InlineExpr` 与 `BlockExpr` 是两个元素类型、同一个 `expr` 族；`FAMILIES` 是族的视图，配置键、日志标签、产物前缀都按族走。
 - **模式配方 ModeSpec**：一个模式对应 text/image/file 三个插槽是否填充（联合能力表 `_MODE_SPECS`）。
-- **元素配方 ElementSpec**：一个 segment 类型对应渲染函数、原文还原、清洗键、产物前缀（分发表 `_ELEMENT_SPECS`）。
+- **文本配方 TextRecipe**：`to_plain`（清洗开时的裸文本）与 `to_markdown`（原文）；哪个清洗开关管这个元素也登记在元素上。
 - **分组 group**：按切分配置（分隔线=切分 / 连续换行=切分 / 块级元素）把 Segment 列表拆成多条消息。纯文本段 + 行内表达式组成的内联组带 `keep_whole` 标记。
 - **内联组 keep_whole**：只含纯文本段 + 行内表达式的组整组合并成一条消息，表达式图片插在文字原位。
 - **拆条 split**：块级组（代码块/HTML 文档/Mermaid 图表/表格/块级表达式）逐组件拆成独立消息，保持阅读顺序。
@@ -31,7 +33,7 @@ AstrBot 插件，在 `OnDecoratingResultEvent` 阶段把消息中的 markdown **
 - **产出消息 Message**：流水线产出的带 `is_tail` 标记的消息，`chain` 为组件列表；`is_tail` 即留尾语义，送达侧因此不必向前多取一条。
 - **保序**：严格按分组顺序产出，某组渲染慢时它后面的消息一律等它，绝不越过。
 
-模块：`render/chain.py`。
+模块：`render/elements.py`（注册表）、`render/chain.py`（管线）。
 
 ## 渲染（render）
 

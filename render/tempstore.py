@@ -13,9 +13,13 @@ import re
 from datetime import datetime
 
 from astrbot.api import logger
+from render.elements import FAMILIES
 
-# 本插件渲染产物命名模式：code/table/expr/html/mermaid_时间戳_微秒.{png,md}
-_TEMP_FILE_RE = re.compile(r"^(code|table|expr|html|mermaid)_\d{8}_\d{6}_\d{6}\.(png|md)$")
+# 本插件渲染产物命名模式：{元素族键}_时间戳_微秒.{png,md}。
+# 族键清单从元素注册表派生，不再手写维护。
+_TEMP_FILE_RE = re.compile(
+    rf"^({'|'.join(FAMILIES)})_\d{{8}}_\d{{6}}_\d{{6}}\.(png|md)$"
+)
 
 # 存活 0 分钟时按一个清扫周期（60 秒）兜底，避免误删尚未发送的渲染产物
 _MIN_TTL_MINUTES = 1.0
