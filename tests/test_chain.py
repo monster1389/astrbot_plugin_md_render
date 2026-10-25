@@ -4,13 +4,21 @@ from functools import partial
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from factories import clean_cfg as _clean_cfg
 from factories import collect as _collect
 from factories import render_cfg as _render_cfg_base
 from factories import segment_cfg as _segment_cfg
+
 from render.artifacts import Picture, SourceFile, Text
-from render.parser import BlockExpr, CodeBlock, Divider, HtmlDoc, InlineExpr, MermaidBlock, Segment
+from render.parser import (
+    BlockExpr,
+    CodeBlock,
+    Divider,
+    HtmlDoc,
+    InlineExpr,
+    MermaidBlock,
+    Segment,
+)
 from render.table_domain import RichCell, Span, Table
 
 # 这些用例测链组装与顺序，fake 渲染器返回假字节，量化由 test_png.py 覆盖

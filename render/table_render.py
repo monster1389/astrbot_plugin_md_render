@@ -13,9 +13,9 @@ import base64
 import html as htmllib
 from dataclasses import dataclass, field
 
+from astrbot.api import logger
 from PIL import ImageFont
 
-from astrbot.api import logger
 from render import canvas, font
 from render.expr_render import formula_image
 from render.parser import InlineExpr, split_inline_math

@@ -4,10 +4,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from astrbot.api import logger
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-from astrbot.api import logger
 from render.table_domain import Table, parse_table
 
 # 块级数学表达式只认行首 $$：行中出现的 $$ 属于正文（比如被反引号包住的 $$）

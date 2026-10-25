@@ -1,6 +1,6 @@
 """PNG 归一化测试。"""
-import io
 import base64
+import io
 
 import pytest
 from PIL import Image
@@ -68,7 +68,7 @@ class TestChainQuantizesProduct:
 
         fake = MagicMock(return_value=_PNG_1PX)
         cfg = RenderConfig(
-            modes={key: "不处理" for key in FAMILIES} | {"code": "渲染图像"},
+            modes=dict.fromkeys(FAMILIES, "不处理") | {"code": "渲染图像"},
             temp_ttl=0,
         )
         result = asyncio.run(

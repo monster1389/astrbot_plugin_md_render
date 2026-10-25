@@ -4,6 +4,7 @@ import time
 from unittest.mock import AsyncMock, patch
 
 from factories import segment_cfg as _make_cfg
+
 from render.artifacts import Message, Picture, SourceFile, Text
 
 
@@ -125,7 +126,8 @@ class TestDeliver:
 
         async def slow_pipeline():
             yield Message([Picture(png=b"1")], is_tail=False)
-            time.sleep(0.12)  # 模拟第 2 条渲染耗时（时钟照常前进）
+            # 模拟第 2 条渲染耗时：要真的推进时钟，而 asyncio.sleep 已被替身接管
+            time.sleep(0.12)  # noqa: ASYNC251
             yield Message([Picture(png=b"2")], is_tail=False)
             yield Message([Text("尾")], is_tail=True)
 
@@ -149,7 +151,7 @@ class TestDeliver:
 
         async def slow_pipeline():
             yield Message([Picture(png=b"1")], is_tail=False)
-            time.sleep(0.4)  # 渲染耗时已超过 0.3s 下限
+            time.sleep(0.4)  # noqa: ASYNC251 —— 同上，要真实耗时超过 0.3s 下限
             yield Message([Picture(png=b"2")], is_tail=False)
             yield Message([Text("尾")], is_tail=True)
 

@@ -1,0 +1,25 @@
+# 插件自带的 ruff 配置。没有它时 ruff 会向上取容器里 `/AstrBot/pyproject.toml`，
+# 那份把 `tests` 排除在外，于是 `ruff check .` 对测试目录永远报「All checks passed」。
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "F",     # Pyflakes
+  "W",     # pycodestyle warnings
+  "E",     # pycodestyle errors
+  "ASYNC", # flake8-async
+  "C4",    # flake8-comprehensions
+  "Q",     # flake8-quotes
+  "I",     # import-order
+  "UP",    # pyupgrade
+]
+ignore = [
+  "F403",
+  "F405",
+  "E501",
+  "ASYNC230",
+  "ASYNC240",
+]

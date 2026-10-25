@@ -78,6 +78,7 @@ sys.modules["astrbot.api.event"] = _event
 
 # AstrBotConfig — main.py 用其做类型标注
 import astrbot.api  # noqa: E402
+
 astrbot.api.AstrBotConfig = dict
 
 from astrbot.api.message_components import Image, Plain  # noqa: E402

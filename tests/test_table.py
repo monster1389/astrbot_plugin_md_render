@@ -8,13 +8,12 @@ from PIL import Image
 from render import canvas, font, renderer
 from render.expr_render import Formula
 from render.parser import parse
-from render.table_domain import RichCell, Span, Table
-from render.table_domain import table_to_markdown
+from render.table_domain import RichCell, Span, Table, table_to_markdown
 from render.table_render import (
-    _Layout,
     _cell,
     _decorate,
     _document,
+    _Layout,
     _natural_widths,
     plan_widths,
     render_table,

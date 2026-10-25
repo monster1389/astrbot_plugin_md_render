@@ -9,12 +9,12 @@
 """
 from __future__ import annotations
 
+from astrbot.api import logger
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import TextLexer, get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from astrbot.api import logger
 from render import canvas
 from render.font import find_font_spec
 

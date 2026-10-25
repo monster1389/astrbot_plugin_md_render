@@ -31,7 +31,7 @@ def render_cfg(temp_ttl: int = 0, **modes: str) -> RenderConfig:
         渲染配置。
     """
     return RenderConfig(
-        modes={key: "不处理" for key in FAMILIES} | modes,
+        modes=dict.fromkeys(FAMILIES, "不处理") | modes,
         temp_ttl=temp_ttl,
     )
 

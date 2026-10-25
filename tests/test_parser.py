@@ -20,7 +20,7 @@ from render.table_domain import Table, table_to_markdown
 class TestCodeBlock:
     def test_single_code_block(self):
         """单个代码块。"""
-        text = '```python\ndef f(): pass\n```'
+        text = "```python\ndef f(): pass\n```"
         segments = parse(text)
         assert len(segments) == 1
         seg = segments[0]

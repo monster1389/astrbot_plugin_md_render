@@ -57,7 +57,7 @@ _SAMPLES: dict[type, tuple[object, str, str]] = {
 # 清洗开关全开：三个元素族的开关默认是关的，这里显式打开
 _CLEAN_ON = CleanConfig(code=True, table=True, expr=True)
 # 清洗全关（含所有行内格式开关）
-_CLEAN_OFF = CleanConfig(**{name: False for name in vars(CleanConfig())})
+_CLEAN_OFF = CleanConfig(**dict.fromkeys(vars(CleanConfig()), False))
 
 _IDS = lambda kind: kind.__name__  # noqa: E731
 

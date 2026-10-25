@@ -9,6 +9,7 @@ from typing import Any
 
 from astrbot.api.message_components import File as AstrFile
 from astrbot.api.message_components import Image, Plain
+
 from render.artifacts import Artifact, Picture, SourceFile, Text
 
 

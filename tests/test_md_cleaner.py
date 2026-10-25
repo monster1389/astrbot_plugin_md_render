@@ -1,12 +1,12 @@
 """md_cleaner 测试。"""
 from __future__ import annotations
 
-from render.md_cleaner import clean_markdown
 from render.config import CleanConfig
+from render.md_cleaner import clean_markdown
 
 
 def _all_on(**overrides) -> CleanConfig:
-    defaults = {k: True for k in vars(CleanConfig())}
+    defaults = dict.fromkeys(vars(CleanConfig()), True)
     defaults.update(overrides)
     return CleanConfig(**defaults)
 
