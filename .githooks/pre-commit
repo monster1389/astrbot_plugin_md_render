@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# 提交前跑 scripts/check.sh；红了就拒绝提交。
+# 本仓库启用它：git config core.hooksPath .githooks
+# 临时跳过：git commit --no-verify
+set -euo pipefail
+
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh"

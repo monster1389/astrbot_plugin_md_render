@@ -21,11 +21,11 @@ AstrBot 插件：拦截 QQ 消息里的 markdown 代码块、HTML 文档、Merma
 ## 操作
 
 ```bash
-# 代码检查
-docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot ruff check .
+# 全部检查：ruff + pytest（pre-commit 跑同一份）
+scripts/check.sh
 
-# 全部测试
-docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest
+# 新 clone 后启用 pre-commit（只需一次）
+git config core.hooksPath .githooks
 
 # 单个测试文件 / 单个用例
 docker exec -w /AstrBot/data/plugins/astrbot_plugin_md_render astrbot python3 -m pytest tests/test_xxx.py
@@ -39,6 +39,8 @@ docker restart astrbot
 ```
 
 容器名 `astrbot`，容器内路径 `/AstrBot/data/plugins/astrbot_plugin_md_render` 与宿主机本目录 bind mount 同步。
+
+**动手与提交的门槛**：改代码等「动手 / 可以 / 按默认」；`git commit` 等「提交」。讨论的产出留在回复里，跟着对话走。
 
 ## 环境约束
 
